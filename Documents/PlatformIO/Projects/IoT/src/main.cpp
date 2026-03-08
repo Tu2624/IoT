@@ -14,13 +14,15 @@
 // --- Thông số cấu hình ---
 const char* ssid = "phong 501";
 const char* password = "23456789";
-const char* mqtt_server = "broker.hivemq.com";
+const char* mqtt_server = "192.168.5.102";
 
 // --- Biến quản lý thời gian (Non-blocking) ---
 unsigned long lastSensorTime = 0;
 const long sensorInterval = 2000; // Đọc cảm biến mỗi 2 giây
 
 unsigned long lastWaveTime = 0;
+unsigned long lastReconnectAttempt = 0;
+const long reconnectInterval = 5000; // Thử kết nối lại mỗi 5 giây
 const long waveSpeed = 150;      // Tốc độ chạy sóng (ms)
 int currentLedStep = 0;          // Bước hiện tại của sóng LED
 
@@ -44,7 +46,7 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
   Serial.println("\nWiFi connected");
   
-  client.setServer(mqtt_server, 1883);
+  client.setServer(mqtt_server, 2004);
 }
 
 // --- HÀM CHẠY SÓNG LED RIÊNG BIỆT ---
@@ -97,15 +99,40 @@ void updateSensors() {
   }
 }
 
+void reconnectWiFi() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi lost, reconnecting...");
+    WiFi.disconnect();
+    WiFi.begin(ssid, password);
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+      delay(500);
+      Serial.print(".");
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\nWiFi reconnected");
+    } else {
+      Serial.println("\nWiFi reconnect failed");
+    }
+  }
+}
+
 void reconnect() {
-  if (!client.connected()) {
-    if (client.connect("ESP32_Async_Client")) {
+  unsigned long currentMillis = millis();
+  if (!client.connected() && currentMillis - lastReconnectAttempt >= reconnectInterval) {
+    lastReconnectAttempt = currentMillis;
+    Serial.println("Attempting MQTT reconnect...");
+    if (client.connect("ESP32_Async_Client", "B22DCPT244", "123456")) {
       Serial.println("MQTT Connected");
+    } else {
+      Serial.printf("MQTT failed, rc=%d. Retry in %lus\n", client.state(), reconnectInterval / 1000);
     }
   }
 }
 
 void loop() {
+  reconnectWiFi();
+
   // MQTT duy trì kết nối
   if (!client.connected()) {
     reconnect();
