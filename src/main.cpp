@@ -5,16 +5,16 @@
 #include <BH1750.h>
 
 // --- Cấu hình Pin ---
-#define LED_DHT 27
-#define LED_BH  26
-#define LED_SYS 5
-#define DHTPIN  4
+#define LED_DHT 27 
+#define LED_BH  26   
+#define LED_SYS 5   
+#define DHTPIN  4    
 #define DHTTYPE DHT11
 
 // --- MQTT Topics ---
 #define TOPIC_SENSORS "esp32/sensors"
-#define TOPIC_CONTROL "esp32/control"
-#define TOPIC_STATUS  "esp32/status"
+#define TOPIC_CONTROL "esp32/control" 
+#define TOPIC_STATUS  "esp32/status" 
 
 // --- Thông số cấu hình ---
 const char* ssid        = "iPhone";
@@ -28,11 +28,19 @@ const long sensorInterval = 2000;
 unsigned long lastWaveTime = 0;
 unsigned long lastReconnectAttempt = 0;
 const long reconnectInterval = 5000;
-const long waveSpeed = 150;
-int currentLedStep = 0;
+const long waveSpeed = 150; 
+int currentLedStep = 0; 
 
 // --- Trạng thái thiết bị ---
-bool waveEnabled = true;
+enum LedMode { LED_STATIC, LED_WAVE, LED_BLINK };
+LedMode ledMode = LED_STATIC;
+
+bool ledStates[3] = { true, true, true };  // BH=0, DHT=1, SYS=2
+
+unsigned long lastBlinkTime = 0;
+bool blinkState = false;
+const long blinkSpeed = 500;
+
 bool sensorsEnabled = true;
 
 enum PendingCmd { CMD_NONE, CMD_ON, CMD_OFF };
@@ -46,12 +54,20 @@ BH1750 lightMeter;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// --- PUBLISH TRẠNG THÁI ---
+
+void applyStaticLeds() {
+  digitalWrite(LED_BH,  ledStates[0] ? HIGH : LOW);
+  digitalWrite(LED_DHT, ledStates[1] ? HIGH : LOW);
+  digitalWrite(LED_SYS, ledStates[2] ? HIGH : LOW);
+}
+
 bool publishStatus(const char* trigger) {
   char msg[128];
+  const char* modeStr = (ledMode == LED_WAVE)  ? "wave"  :
+                        (ledMode == LED_BLINK) ? "blink" : "static";
   snprintf(msg, sizeof(msg),
-    "{\"status\":\"online\", \"wave\":%s, \"sensors\":%s, \"trigger\":\"%s\"}",
-    waveEnabled ? "true" : "false",
+    "{\"status\":\"online\", \"mode\":\"%s\", \"sensors\":%s, \"trigger\":\"%s\"}",
+    modeStr,
     sensorsEnabled ? "true" : "false",
     trigger
   );
@@ -60,7 +76,6 @@ bool publishStatus(const char* trigger) {
   return ok;
 }
 
-// --- CALLBACK: XỬ LÝ LỆNH ĐIỀU KHIỂN ---
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   char msg[64];
   unsigned int len = (length < sizeof(msg) - 1) ? length : sizeof(msg) - 1;
@@ -71,22 +86,96 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   if (strcmp(topic, TOPIC_CONTROL) != 0) return;
 
+  // --- Wave ---
   if (strstr(msg, "wave_on")) {
-    waveEnabled = true;
+    ledMode = LED_WAVE;
+    currentLedStep = 0;
     Serial.println("[CMD] Wave ON");
     publishStatus("cmd_wave_on");
 
   } else if (strstr(msg, "wave_off")) {
-    waveEnabled = false;
-    digitalWrite(LED_BH,LOW);
-    digitalWrite(LED_DHT,LOW);
-    digitalWrite(LED_SYS,LOW);
-    Serial.println("[CMD] Wave OFF");
+    ledMode = LED_STATIC;
+    applyStaticLeds();
+    Serial.println("[CMD] Wave OFF -> STATIC");
     publishStatus("cmd_wave_off");
 
+  // --- Blink ---
+  } else if (strstr(msg, "blink_on")) {
+    ledMode = LED_BLINK;
+    blinkState = false;
+    lastBlinkTime = 0;
+    Serial.println("[CMD] Blink ON");
+    publishStatus("cmd_blink_on");
+
+  } else if (strstr(msg, "blink_off")) {
+    ledMode = LED_STATIC;
+    applyStaticLeds();
+    Serial.println("[CMD] Blink OFF -> STATIC");
+    publishStatus("cmd_blink_off");
+
+  // --- Global lights ---
+  } else if (strstr(msg, "lights_on")) {
+    ledMode = LED_STATIC;
+    ledStates[0] = ledStates[1] = ledStates[2] = true;
+    applyStaticLeds();
+    Serial.println("[CMD] Lights ON");
+    publishStatus("cmd_lights_on");
+
+  } else if (strstr(msg, "lights_off")) {
+    ledMode = LED_STATIC;
+    ledStates[0] = ledStates[1] = ledStates[2] = false;
+    applyStaticLeds();
+    Serial.println("[CMD] Lights OFF");
+    publishStatus("cmd_lights_off");
+
+  // --- Individual LEDs ---
+  } else if (strstr(msg, "led_bh_on")) {
+    ledMode = LED_STATIC;
+    ledStates[0] = true;
+    applyStaticLeds();
+    Serial.println("[CMD] LED BH ON");
+    publishStatus("cmd_led_bh_on");
+
+  } else if (strstr(msg, "led_bh_off")) {
+    ledMode = LED_STATIC;
+    ledStates[0] = false;
+    applyStaticLeds();
+    Serial.println("[CMD] LED BH OFF");
+    publishStatus("cmd_led_bh_off");
+
+  } else if (strstr(msg, "led_dht_on")) {
+    ledMode = LED_STATIC;
+    ledStates[1] = true;
+    applyStaticLeds();
+    Serial.println("[CMD] LED DHT ON");
+    publishStatus("cmd_led_dht_on");
+
+  } else if (strstr(msg, "led_dht_off")) {
+    ledMode = LED_STATIC;
+    ledStates[1] = false;
+    applyStaticLeds();
+    Serial.println("[CMD] LED DHT OFF");
+    publishStatus("cmd_led_dht_off");
+
+  } else if (strstr(msg, "led_sys_on")) {
+    ledMode = LED_STATIC;
+    ledStates[2] = true;
+    applyStaticLeds();
+    Serial.println("[CMD] LED SYS ON");
+    publishStatus("cmd_led_sys_on");
+
+  } else if (strstr(msg, "led_sys_off")) {
+    ledMode = LED_STATIC;
+    ledStates[2] = false;
+    applyStaticLeds();
+    Serial.println("[CMD] LED SYS OFF");
+    publishStatus("cmd_led_sys_off");
+
+  // --- Sensor control (generic — MUST be last) ---
   } else if (strstr(msg, "on")) {
     sensorsEnabled = true;
     Serial.println("[CMD] Sensors ON — queued");
+    publishStatus("waiting");
     pendingCmd = CMD_ON;
     lastCmdRetryTime = 0;
 
@@ -105,14 +194,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
-// --- HÀM CHẠY SÓNG LED ---
 void updateWave() {
-  if (!waveEnabled) return;
+  if (ledMode != LED_WAVE) return;
 
   unsigned long currentMillis = millis();
   if (currentMillis - lastWaveTime >= waveSpeed) {
     lastWaveTime = currentMillis;
 
+    // Tắt tất cả LED trước khi bật LED tiếp theo
     digitalWrite(LED_BH,  LOW);
     digitalWrite(LED_DHT, LOW);
     digitalWrite(LED_SYS, LOW);
@@ -120,13 +209,26 @@ void updateWave() {
     if (currentLedStep == 0) digitalWrite(LED_BH,  HIGH);
     else if (currentLedStep == 1) digitalWrite(LED_DHT, HIGH);
     else if (currentLedStep == 2) digitalWrite(LED_SYS, HIGH);
+    // Bước 3: tất cả LED tắt (khoảng dừng trước khi lặp lại)
 
     currentLedStep++;
     if (currentLedStep > 3) currentLedStep = 0;
   }
 }
 
-// --- HÀM ĐỌC CẢM BIẾN ---
+void updateBlink() {
+  if (ledMode != LED_BLINK) return;
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastBlinkTime >= blinkSpeed) {
+    lastBlinkTime = currentMillis;
+    blinkState = !blinkState;
+    uint8_t level = blinkState ? HIGH : LOW;
+    digitalWrite(LED_BH,  level);
+    digitalWrite(LED_DHT, level);
+    digitalWrite(LED_SYS, level);
+  }
+}
+
 void updateSensors() {
   if (!sensorsEnabled) return;
   unsigned long currentMillis = millis();
@@ -140,6 +242,7 @@ void updateSensors() {
     bool dhtValid = !isnan(h) && !isnan(t);
     bool luxValid = lux >= 0;
 
+    // Chờ dữ liệu hợp lệ trước khi gửi
     if (!dhtValid || !luxValid) {
       Serial.println("[SENSOR] Waiting for valid data...");
       return;
@@ -193,9 +296,10 @@ void setup() {
   pinMode(LED_DHT, OUTPUT);
   pinMode(LED_BH,  OUTPUT);
   pinMode(LED_SYS, OUTPUT);
+  applyStaticLeds();
 
   dht.begin();
-  Wire.begin(21, 22);
+  Wire.begin(21, 22);  // SDA=GPIO21, SCL=GPIO22
   lightMeter.begin();
 
   WiFi.begin(ssid, password);
@@ -221,6 +325,7 @@ void processPendingCmd() {
   }
 }
 
+
 void loop() {
   reconnectWiFi();
 
@@ -231,5 +336,6 @@ void loop() {
 
   processPendingCmd();
   updateWave();
+  updateBlink();
   updateSensors();
 }

@@ -1,0 +1,73 @@
+/* ===== Global Reset & Base ===== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-main:       #0a1628;
+  --bg-card:       #112055;
+  --bg-card-dark:  #0d1b3e;
+  --color-red:     #e53935;
+  --color-blue:    #1e88e5;
+  --color-orange:  #f59e0b;
+  --color-green:   #22c55e;
+  --text-white:    #ffffff;
+  --text-muted:    #8ba3cc;
+  --nav-bg:        #0d1b3e;
+  --border:        #1e3a6e;
+  --radius-card:   20px;
+  --radius-btn:    50px;
+}
+
+html, body, #app {
+  height: 100%;
+  font-family: 'Inter', sans-serif;
+  background: var(--bg-main);
+  color: var(--text-white);
+  overflow-x: hidden;
+}
+
+a { text-decoration: none; color: inherit; }
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-main); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ===== Page Route Transitions ===== */
+.page-enter-active {
+  animation: pageEnter 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+.page-leave-active {
+  animation: pageLeave 0.25s cubic-bezier(0.55, 0, 1, 0.45) both;
+}
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pageLeave {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-12px); }
+}
+
+/* ===== Global Button Click Ripple ===== */
+.btn-ripple {
+  position: relative;
+  overflow: hidden;
+}
+.btn-ripple::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.15);
+  border-radius: inherit;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  pointer-events: none;
+}
+.btn-ripple:active::after {
+  opacity: 1;
+  transform: scale(1);
+  transition: none;
+}

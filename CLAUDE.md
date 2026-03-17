@@ -35,8 +35,8 @@ pio run --target clean
 - **MQTT client ID**: `ESP32_Async_Client`, credentials hardcoded in `reconnect()`
 - **MQTT topics**:
   - `esp32/sensors` — publishes `{"temp":X, "hum":X, "lux":X}` every 2 seconds
-  - `esp32/control` — subscribes; accepts JSON string commands: `"wave_on"`, `"wave_off"`, `"on"`, `"off"`, `"status"`
-  - `esp32/status` — publishes `{"status":"online", "wave":bool, "sensors":bool, "trigger":"..."}` on connect and after each control command
+  - `esp32/control` — subscribes; accepts commands: `lights_on`, `lights_off`, `wave_on`, `wave_off`, `blink_on`, `blink_off`, `led_bh_on/off`, `led_dht_on/off`, `led_sys_on/off`, `on` (sensors), `off` (sensors), `status`
+  - `esp32/status` — publishes `{"status":"online", "mode":"static|wave|blink", "sensors":bool, "trigger":"..."}` on connect and after each control command
 
 ## Dependencies
 
@@ -45,13 +45,42 @@ Managed via `platformio.ini`:
 - `claws/BH1750@^1.3.0`
 - `knolleary/PubSubClient@^2.8`
 
+## Dashboard (`iot-dashboard/`)
+
+Vue 3 + Vite frontend prototype. Currently uses **mock data** — no live MQTT connection yet. Planned backend: Node.js + MQTT + MySQL (see `iot-dashboard/README.md` for DB schema).
+
+```bash
+cd iot-dashboard
+npm install       # first time only
+npm run dev       # dev server at http://localhost:5173
+npm run build     # production build
+```
+
 ## Architecture
 
-All logic is in `src/main.cpp`. The `loop()` uses non-blocking timing (`millis()`) to run three independent tasks concurrently:
+All logic is in `src/main.cpp`. The `loop()` uses non-blocking timing (`millis()`) to run independent tasks concurrently:
 
-1. **`updateSensors()`** — reads DHT11 + BH1750 every 2s, publishes to `esp32/sensors`
-2. **`updateWave()`** — 4-step cycle (BH→DHT→SYS→off) at 150ms per step; skips when `waveEnabled=false`
-3. **`reconnect()` / `reconnectWiFi()`** — non-blocking reconnect with 5s retry; subscribes to `esp32/control` and calls `publishStatus("connect")` on successful MQTT connect
-4. **`mqttCallback()`** — handles incoming control commands, toggling `waveEnabled`/`sysLedState` and publishing status after each command
+1. **`updateSensors()`** — reads DHT11 + BH1750 every 2s, publishes to `esp32/sensors`; skips when `sensorsEnabled=false`
+2. **`updateWave()`** — 4-step cycle (BH→DHT→SYS→off) at 150ms per step; only runs when `ledMode == LED_WAVE`
+3. **`updateBlink()`** — all 3 LEDs toggle together at 500ms; only runs when `ledMode == LED_BLINK`
+4. **`reconnect()` / `reconnectWiFi()`** — non-blocking MQTT reconnect with 5s retry; subscribes to `esp32/control` and calls `publishStatus("connect")` on success (`reconnectWiFi` blocks up to 10s)
+5. **`mqttCallback()`** — handles all LED and sensor commands; `on` immediately publishes `trigger:"waiting"` then queues `CMD_ON`; `off` only queues `CMD_OFF` (no immediate publish). **strstr order is critical** — all specific `*_on`/`*_off` commands must appear before the generic `on`/`off` sensor fallbacks
+6. **`processPendingCmd()`** — retries `publishStatus()` every 5s until the queued `on`/`off` command is confirmed published
+
+### LED mode system
+`enum LedMode { LED_STATIC, LED_WAVE, LED_BLINK }` — only one mode active at a time. Default is `LED_STATIC` with `ledStates[3] = {true, true, true}` (all on at boot). `applyStaticLeds()` writes `ledStates[]` to GPIO and is called whenever switching to `LED_STATIC`. Individual LED commands (`led_bh_on` etc.) always switch to `LED_STATIC` first.
 
 WiFi credentials (ssid/password) and MQTT broker address/credentials are hardcoded constants at the top of `main.cpp`.
+
+## MQTT Testing
+
+```bash
+# Watch live sensor readings
+mosquitto_sub -h 172.20.10.2 -p 2004 -u B22DCPT244 -P 123456 -t "esp32/sensors" -v
+
+# Watch device status changes
+mosquitto_sub -h 172.20.10.2 -p 2004 -u B22DCPT244 -P 123456 -t "esp32/status" -v
+
+# Send a control command (plain string, not JSON)
+mosquitto_pub -h 172.20.10.2 -p 2004 -u B22DCPT244 -P 123456 -t "esp32/control" -m "wave_on"
+```

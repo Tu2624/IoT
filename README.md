@@ -25,7 +25,7 @@ Chỉnh sửa các hằng số ở đầu `src/main.cpp`:
 ```cpp
 const char* ssid        = "TênWiFi";
 const char* password    = "MatKhauWiFi";
-const char* mqtt_server = "172.20.10.2";   // IP broker MQTT (cổng 2004)
+const char* mqtt_server = "192.168.1.x";   // IP broker MQTT
 ```
 
 ## Build & Flash
@@ -83,3 +83,22 @@ Toàn bộ logic nằm trong `src/main.cpp`. Vòng lặp `loop()` dùng `millis(
 - **`updateWave()`** — Chu kỳ sóng LED 4 bước (BH→DHT→SYS→tắt) mỗi 150ms.
 - **`processPendingCmd()`** — Hàng đợi lệnh `on`/`off`: thử lại publish mỗi 5 giây cho đến khi `client.publish()` thành công.
 - **`reconnect()` / `reconnectWiFi()`** — Tự động kết nối lại WiFi và MQTT, thử lại mỗi 5 giây.
+
+
+  Window 1 — Data Sensor (watch live readings):
+  	mosquitto_sub -h 172.20.10.2 -p 2004 -u B22DCPT244 -P 123456 -t "esp32/sensors" -v 
+
+  
+  Window 2 — Device Status (watch state changes)
+
+	mosquitto_sub -h 172.20.10.2 -p 2004 -u B22DCPT244 -P 123456 -t "esp32/status" -v 
+
+
+  Window 3 — Control Command (run one at a time)
+
+	mosquitto_pub -h 172.20.10.2 -p 2004 -u B22DCPT244 -P 123456 -t "esp32/control" -m '{"cmd":"wave_off"' 
+  	mosquitto_pub -h 172.20.10.2 -p 2004 -u B22DCPT244 -P 123456 -t "esp32/control" -m '{"cmd":"wave_on"}'      
+	mosquitto_pub -h 172.20.10.2 -p 2004 -u B22DCPT244 -P 123456 -t "esp32/control" -m '{"cmd":"off"'   
+  	mosquitto_pub -h 172.20.10.2 -p 2004 -u B22DCPT244 -P 123456 -t "esp32/control" -m '{"cmd":"on"'     
+
+                                                                                                         
