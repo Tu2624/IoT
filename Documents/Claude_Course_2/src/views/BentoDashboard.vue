@@ -1,10 +1,15 @@
 <script setup lang="ts">
+import { storeToRefs } from 'pinia'
 import KpiCard from '../components/KpiCard.vue'
 import RevenueChart from '../components/RevenueChart.vue'
 import ActivityFeed from '../components/ActivityFeed.vue'
 import GoalsPanel from '../components/GoalsPanel.vue'
-import { kpiCards, revenueChartSeries, activityFeed, goals } from '../data/mockData'
+import { revenueChartSeries } from '../data/mockData'
+import { useDashboardStore } from '../stores/dashboardStore'
 import type { RevenueChartConfig } from '../types/dashboard'
+
+const store = useDashboardStore()
+const { kpiCards, activityFeed, goals } = storeToRefs(store)
 
 const chartConfig: RevenueChartConfig = {
   title: 'Revenue vs. Expenses',
