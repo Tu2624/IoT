@@ -14,23 +14,22 @@ interface SensorData {
   lux: number;
 }
 
+const MAX_CHART_POINTS = 5; // Chỉ hiển thị 5 giá trị gần nhất
+
 export default function Dashboard() {
   const [dataList, setDataList] = useState<SensorData[]>([]);
   const [current, setCurrent] = useState({ temp: 0, humi: 0, lux: 0 });
   const [mounted, setMounted] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
-  // States for small sensor toggles (True = reading enabled)
-  const [sensorState, setSensorState] = useState({ temp: true, humi: true, lux: true });
-
-  // States for big LED toggles
-  const [leds, setLeds] = useState({ bh: true, temp: true, humi: true });
+  // States for big LED toggles - khởi tạo null để biết chưa fetch
+  const [leds, setLeds] = useState<{ bh: boolean; temp: boolean; humi: boolean } | null>(null);
 
   // Connection states
   const [mqttStatus, setMqttStatus] = useState<'connected' | 'disconnected'>('disconnected');
   const [espStatus, setEspStatus] = useState<'online' | 'offline'>('offline');
 
-  // Pre-compute random positions once — avoid regenerating on every render
+  // Pre-compute random positions once
   const fireParticles = useMemo(() => Array.from({ length: 6 }, () => ({
     left: `${Math.random() * 80 + 10}%`,
     delay: `${Math.random() * 3}s`,
@@ -43,16 +42,52 @@ export default function Dashboard() {
 
   useEffect(() => {
     setMounted(true);
-    // Only init socket once
+
+    // === Fetch trạng thái thiết bị từ DB ===
+    fetch('/api/status')
+      .then(res => res.json())
+      .then(json => {
+        if (json.status) {
+          setLeds({
+            temp: json.status.led_temp ?? true,
+            humi: json.status.led_humi ?? true,
+            bh: json.status.led_bh ?? true,
+          });
+        }
+      })
+      .catch(() => {
+        // Fallback mặc định nếu API lỗi
+        setLeds({ bh: true, temp: true, humi: true });
+      });
+
+    // === Fetch 5 giá trị cảm biến gần nhất cho biểu đồ ===
+    fetch('/api/sensors/recent')
+      .then(res => res.json())
+      .then((rows: any[]) => {
+        if (Array.isArray(rows) && rows.length > 0) {
+          const chartData: SensorData[] = rows.map(r => ({
+            time: moment(r.recorded_date).format('HH:mm:ss'),
+            temp: r.temp,
+            humi: r.humi,
+            lux: r.lux,
+          }));
+          setDataList(chartData);
+          // Cập nhật current từ giá trị mới nhất
+          const latest = rows[rows.length - 1];
+          setCurrent({ temp: latest.temp, humi: latest.humi, lux: latest.lux });
+        }
+      })
+      .catch(() => { /* ignore */ });
+
+    // === Init socket ===
     if (!socketRef.current) {
       socketRef.current = io(process.env.NEXT_PUBLIC_API_URL || '', { path: '/socket.io' });
 
       socketRef.current.on('sensor_data', (payload: any) => {
-        // payload = { id, temp, humi, lux, recorded_date }
         const newData: SensorData = {
           time: moment(payload.recorded_date).format('HH:mm:ss'),
           temp: payload.temp,
-          humi: payload.humi, // Updated from hum
+          humi: payload.humi,
           lux: payload.lux
         };
 
@@ -60,7 +95,8 @@ export default function Dashboard() {
 
         setDataList((prev) => {
           const updated = [...prev, newData];
-          if (updated.length > 50) updated.shift();
+          // Giữ chỉ 5 điểm gần nhất
+          while (updated.length > MAX_CHART_POINTS) updated.shift();
           return updated;
         });
       });
@@ -70,12 +106,8 @@ export default function Dashboard() {
       });
 
       socketRef.current.on('device_status', (payload: any) => {
-        console.log('Status from ESP32:', payload);
         if (payload.status) {
           setEspStatus(payload.status);
-          if (payload.mode) {
-            // Update mode state if needed
-          }
         }
       });
     }
@@ -92,8 +124,9 @@ export default function Dashboard() {
   }, []);
 
   const toggleLed = (ledName: 'bh' | 'temp' | 'humi') => {
+    if (!leds) return; // Chưa load xong trạng thái
     const newState = !leds[ledName];
-    setLeds(prev => ({ ...prev, [ledName]: newState }));
+    setLeds(prev => prev ? { ...prev, [ledName]: newState } : prev);
 
     if (socketRef.current) {
       socketRef.current.emit('control_device', {
@@ -104,18 +137,9 @@ export default function Dashboard() {
     }
   };
 
-  const toggleSensor = (sensorKey: 'temp' | 'humi' | 'lux') => {
-    const newState = !sensorState[sensorKey];
-    setSensorState(prev => ({ ...prev, [sensorKey]: newState }));
-
-    if (socketRef.current) {
-      socketRef.current.emit('control_device', {
-        cmd: 'sensor',
-        target: sensorKey,
-        state: newState ? 1 : 0
-      });
-    }
-  };
+  // Hiển thị loading nếu chưa fetch xong trạng thái LED
+  const ledsReady = leds !== null;
+  const safeLeds = leds ?? { bh: true, temp: true, humi: true };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -140,11 +164,14 @@ export default function Dashboard() {
         </div>
 
         {/* Card 2: Device Controls (Center) */}
-        <div className="flex-1 flex justify-center mr-[220px]"> {/* Offset to account for Card 1 width and keep actual center */}
-          <div className="flex items-center gap-12 bg-slate-900/60 p-4 px-10 rounded-2xl border border-white/10 backdrop-blur-md shadow-2xl transition-all duration-300">
-            <DeviceToggle color="red" label="Nhiệt độ" checked={leds.temp} onChange={() => toggleLed('temp')} />
-            <DeviceToggle color="blue" label="Độ ẩm" checked={leds.humi} onChange={() => toggleLed('humi')} />
-            <DeviceToggle color="yellow" label="Ánh sáng" checked={leds.bh} onChange={() => toggleLed('bh')} />
+        <div className="flex-1 flex justify-center mr-[220px]">
+          <div className={clsx(
+            "flex items-center gap-12 bg-slate-900/60 p-4 px-10 rounded-2xl border border-white/10 backdrop-blur-md shadow-2xl transition-all duration-300",
+            !ledsReady && "opacity-50 pointer-events-none"
+          )}>
+            <DeviceToggle color="red" label="Nhiệt độ" checked={safeLeds.temp} onChange={() => toggleLed('temp')} />
+            <DeviceToggle color="blue" label="Độ ẩm" checked={safeLeds.humi} onChange={() => toggleLed('humi')} />
+            <DeviceToggle color="yellow" label="Ánh sáng" checked={safeLeds.bh} onChange={() => toggleLed('bh')} />
           </div>
         </div>
       </div>
@@ -236,8 +263,6 @@ export default function Dashboard() {
   );
 }
 
-// {SensorToggle component removed}
-
 function DeviceToggle({ color, label, checked, onChange }: { color: 'red' | 'blue' | 'yellow', label: string, checked: boolean, onChange: () => void }) {
   const config = {
     red: { bg: 'bg-[#FF0000]', icon: <Thermometer className="w-5 h-5 text-white stroke-[2.5]" /> },
@@ -279,7 +304,6 @@ function DeviceToggle({ color, label, checked, onChange }: { color: 'red' | 'blu
               "absolute top-[2px] w-[30px] h-[30px] rounded-full shadow-md transition-all duration-500 flex items-center justify-center overflow-hidden z-10",
               checked ? "bg-[#E2EFFF] left-[30px]" : "bg-white left-[2px]"
             )}>
-              {/* Moon-Craters (only visible when checked/ON as per your moon design, or simple white when OFF) */}
               {checked ? (
                 <>
                   <div className="w-1.5 h-1.5 bg-[#BEDAFF] rounded-full absolute top-1.5 left-1.5"></div>
