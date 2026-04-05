@@ -1,0 +1,164 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* --- Sensor Card Animations --- */
+
+.sensor-card-animation {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.9;
+}
+
+/* Fire Effect (Nhiệt độ) */
+.fire-effect {
+  background: radial-gradient(circle at bottom, rgba(239, 68, 68, 0.15) 0%, transparent 70%);
+}
+
+.fire-particle {
+  position: absolute;
+  bottom: -10px;
+  width: 24px;
+  height: 24px;
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.7) 0%, transparent 80%);
+  border-radius: 50%;
+  animation: fire-rise 3.5s infinite ease-in;
+}
+
+@keyframes fire-rise {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 0.6;
+  }
+
+  100% {
+    transform: translateY(-120px) scale(0.5);
+    opacity: 0;
+  }
+}
+
+/* Water Effect (Độ ẩm) */
+.water-effect {
+  background: linear-gradient(to bottom, transparent, rgba(59, 130, 246, 0.1));
+}
+
+.water-drop {
+  position: absolute;
+  top: -20px;
+  width: 3px;
+  height: 20px;
+  background: linear-gradient(to bottom, transparent, rgba(59, 130, 246, 0.8));
+  border-radius: 100%;
+  animation: water-fall 1.8s infinite linear;
+}
+
+@keyframes water-fall {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+
+  30% {
+    opacity: 0.6;
+  }
+
+  100% {
+    transform: translateY(200px);
+    opacity: 0;
+  }
+}
+
+/* Solar Effect (Ánh sáng) */
+.solar-effect {
+  background: radial-gradient(circle at center, rgba(234, 179, 8, 0.1) 0%, transparent 60%);
+}
+
+.solar-beam {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200%;
+  height: 2px;
+  background: linear-gradient(to right, transparent, rgba(250, 204, 21, 0.2), transparent);
+  transform-origin: center;
+  animation: solar-rotate 10s infinite linear;
+}
+
+@keyframes solar-rotate {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+.pulsing-aura {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100px;
+  height: 100px;
+  background: radial-gradient(circle, rgba(250, 204, 21, 0.2) 0%, transparent 70%);
+  transform: translate(-50%, -50%);
+  animation: aura-pulse 4s infinite ease-in-out;
+}
+
+@keyframes aura-pulse {
+
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.3;
+  }
+
+  50% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 0.1;
+  }
+}
+.pulse-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, var(--glow-color) 0%, transparent 70%);
+  animation: pulse-animation 4s infinite ease-in-out;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes pulse-animation {
+  0%, 100% { opacity: 0.25; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.1); }
+}
+
+.glow-yellow { --glow-color: rgba(234, 179, 8, 0.6); }

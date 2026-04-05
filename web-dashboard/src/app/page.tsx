@@ -1,0 +1,299 @@
+'use client';
+import { useEffect, useState, useRef, useMemo } from 'react';
+import Card from '@/components/Card';
+import { io, Socket } from 'socket.io-client';
+import { Thermometer, Droplets, Sun, Power } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { clsx } from 'clsx';
+import moment from 'moment';
+
+interface SensorData {
+  time: string;
+  temp: number;
+  humi: number;
+  lux: number;
+}
+
+export default function Dashboard() {
+  const [dataList, setDataList] = useState<SensorData[]>([]);
+  const [current, setCurrent] = useState({ temp: 0, humi: 0, lux: 0 });
+  const [mounted, setMounted] = useState(false);
+  const socketRef = useRef<Socket | null>(null);
+
+  // States for small sensor toggles (True = reading enabled)
+  const [sensorState, setSensorState] = useState({ temp: true, humi: true, lux: true });
+
+  // States for big LED toggles
+  const [leds, setLeds] = useState({ bh: true, temp: true, humi: true });
+
+  // Connection states
+  const [mqttStatus, setMqttStatus] = useState<'connected' | 'disconnected'>('disconnected');
+  const [espStatus, setEspStatus] = useState<'online' | 'offline'>('offline');
+
+  // Pre-compute random positions once — avoid regenerating on every render
+  const fireParticles = useMemo(() => Array.from({ length: 6 }, () => ({
+    left: `${Math.random() * 80 + 10}%`,
+    delay: `${Math.random() * 3}s`,
+  })), []);
+  const waterDrops = useMemo(() => Array.from({ length: 8 }, () => ({
+    left: `${Math.random() * 90 + 5}%`,
+    delay: `${Math.random() * 2}s`,
+    duration: `${1.5 + Math.random()}s`,
+  })), []);
+
+  useEffect(() => {
+    setMounted(true);
+    // Only init socket once
+    if (!socketRef.current) {
+      socketRef.current = io(process.env.NEXT_PUBLIC_API_URL || '', { path: '/socket.io' });
+
+      socketRef.current.on('sensor_data', (payload: any) => {
+        // payload = { id, temp, humi, lux, recorded_date }
+        const newData: SensorData = {
+          time: moment(payload.recorded_date).format('HH:mm:ss'),
+          temp: payload.temp,
+          humi: payload.humi, // Updated from hum
+          lux: payload.lux
+        };
+
+        setCurrent({ temp: payload.temp, humi: payload.humi, lux: payload.lux });
+
+        setDataList((prev) => {
+          const updated = [...prev, newData];
+          if (updated.length > 50) updated.shift();
+          return updated;
+        });
+      });
+
+      socketRef.current.on('mqtt_status', (status: 'connected' | 'disconnected') => {
+        setMqttStatus(status);
+      });
+
+      socketRef.current.on('device_status', (payload: any) => {
+        console.log('Status from ESP32:', payload);
+        if (payload.status) {
+          setEspStatus(payload.status);
+          if (payload.mode) {
+            // Update mode state if needed
+          }
+        }
+      });
+    }
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.off('sensor_data');
+        socketRef.current.off('mqtt_status');
+        socketRef.current.off('device_status');
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, []);
+
+  const toggleLed = (ledName: 'bh' | 'temp' | 'humi') => {
+    const newState = !leds[ledName];
+    setLeds(prev => ({ ...prev, [ledName]: newState }));
+
+    if (socketRef.current) {
+      socketRef.current.emit('control_device', {
+        cmd: 'led',
+        target: ledName,
+        state: newState ? 1 : 0
+      });
+    }
+  };
+
+  const toggleSensor = (sensorKey: 'temp' | 'humi' | 'lux') => {
+    const newState = !sensorState[sensorKey];
+    setSensorState(prev => ({ ...prev, [sensorKey]: newState }));
+
+    if (socketRef.current) {
+      socketRef.current.emit('control_device', {
+        cmd: 'sensor',
+        target: sensorKey,
+        state: newState ? 1 : 0
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex items-center justify-between">
+        {/* Card 1: Status Monitor (Left) */}
+        <div className="flex items-center gap-6 bg-slate-800/50 p-4 px-6 rounded-2xl border border-slate-700/50 backdrop-blur-md shadow-lg h-fit">
+          <div className="flex flex-col gap-1.5">
+            <h1 className="text-sm font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent uppercase tracking-wider whitespace-nowrap">Trạng thái hệ thống</h1>
+            <div className="flex gap-2">
+              <span className={clsx("flex items-center gap-1.5 text-[9px] font-bold px-2 py-0.5 rounded-md border",
+                mqttStatus === 'connected' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border-rose-500/20")}>
+                <div className={clsx("w-1 h-1 rounded-full animate-pulse", mqttStatus === 'connected' ? "bg-emerald-400" : "bg-rose-400")}></div>
+                MQTT
+              </span>
+              <span className={clsx("flex items-center gap-1.5 text-[9px] font-bold px-2 py-0.5 rounded-md border",
+                espStatus === 'online' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border-rose-500/20")}>
+                <div className={clsx("w-1 h-1 rounded-full animate-pulse", espStatus === 'online' ? "bg-emerald-400" : "bg-rose-400")}></div>
+                ESP32
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: Device Controls (Center) */}
+        <div className="flex-1 flex justify-center mr-[220px]"> {/* Offset to account for Card 1 width and keep actual center */}
+          <div className="flex items-center gap-12 bg-slate-900/60 p-4 px-10 rounded-2xl border border-white/10 backdrop-blur-md shadow-2xl transition-all duration-300">
+            <DeviceToggle color="red" label="Nhiệt độ" checked={leds.temp} onChange={() => toggleLed('temp')} />
+            <DeviceToggle color="blue" label="Độ ẩm" checked={leds.humi} onChange={() => toggleLed('humi')} />
+            <DeviceToggle color="yellow" label="Ánh sáng" checked={leds.bh} onChange={() => toggleLed('bh')} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Card Nhiệt độ */}
+        <Card glowColor="red" className="p-6 relative overflow-hidden group">
+          <div className="sensor-card-animation fire-effect">
+            {mounted && fireParticles.map((p, i) => (
+              <div key={i} className="fire-particle" style={{ left: p.left, animationDelay: p.delay }}></div>
+            ))}
+          </div>
+          <div className="flex items-center gap-4 relative z-10">
+            <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center">
+              <Thermometer className="w-6 h-6 text-red-400" />
+            </div>
+            <div>
+              <p className="text-slate-400 text-sm font-medium">Temperature</p>
+              <div className="flex items-baseline gap-1">
+                <h3 className="text-3xl font-bold text-slate-100">{current.temp.toFixed(1)}</h3>
+                <span className="text-red-400 text-sm font-semibold">°C</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Card Độ ẩm */}
+        <Card glowColor="blue" className="p-6 relative overflow-hidden group">
+          <div className="sensor-card-animation water-effect">
+            {mounted && waterDrops.map((p, i) => (
+              <div key={i} className="water-drop" style={{ left: p.left, animationDelay: p.delay, animationDuration: p.duration }}></div>
+            ))}
+          </div>
+          <div className="flex items-center gap-4 relative z-10">
+            <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
+              <Droplets className="w-6 h-6 text-blue-400" />
+            </div>
+            <div>
+              <p className="text-slate-400 text-sm font-medium">Humidity</p>
+              <div className="flex items-baseline gap-1">
+                <h3 className="text-3xl font-bold text-slate-100">{current.humi.toFixed(1)}</h3>
+                <span className="text-blue-400 text-sm font-semibold">%</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Card Ánh sáng */}
+        <Card glowColor="yellow" className="p-6 relative overflow-hidden group">
+          <div className="pulse-glow glow-yellow"></div>
+          <div className="flex items-center gap-4 relative z-10">
+            <div className="w-12 h-12 bg-yellow-500/20 rounded-xl flex items-center justify-center">
+              <Sun className="w-6 h-6 text-yellow-500" />
+            </div>
+            <div>
+              <p className="text-slate-400 text-sm font-medium">Light</p>
+              <div className="flex items-baseline gap-1">
+                <h3 className="text-3xl font-bold text-slate-100">{current.lux.toFixed(0)}</h3>
+                <span className="text-yellow-500 text-sm font-semibold">Lx</span>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <Card className="p-6 min-h-[400px]">
+        <h3 className="text-lg font-semibold mb-6 text-slate-200">Biểu đồ Thông số Thời gian thực</h3>
+        <div className="h-[350px] w-full min-h-[350px]">
+          {mounted && (
+            <ResponsiveContainer width="100%" height="100%" minHeight={350} minWidth={100}>
+              <LineChart data={dataList} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} tickMargin={10} minTickGap={20} />
+                <YAxis stroke="#94a3b8" fontSize={12} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                  itemStyle={{ color: '#e2e8f0' }}
+                />
+                <Legend verticalAlign="top" height={36} />
+                <Line type="monotone" dataKey="temp" name="Nhiệt độ (°C)" stroke="#ef4444" strokeWidth={3} dot={false} activeDot={{ r: 6 }} isAnimationActive={false} />
+                <Line type="monotone" dataKey="humi" name="Độ ẩm (%)" stroke="#3b82f6" strokeWidth={3} dot={false} activeDot={{ r: 6 }} isAnimationActive={false} />
+                <Line type="monotone" dataKey="lux" name="Ánh sáng (Lx)" stroke="#eab308" strokeWidth={3} dot={false} activeDot={{ r: 6 }} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// {SensorToggle component removed}
+
+function DeviceToggle({ color, label, checked, onChange }: { color: 'red' | 'blue' | 'yellow', label: string, checked: boolean, onChange: () => void }) {
+  const config = {
+    red: { bg: 'bg-[#FF0000]', icon: <Thermometer className="w-5 h-5 text-white stroke-[2.5]" /> },
+    blue: { bg: 'bg-[#0088FF]', icon: <Droplets className="w-5 h-5 text-white" fill="white" /> },
+    yellow: { bg: 'bg-[#FFAA00]', icon: <Sun className="w-5 h-5 text-white stroke-[2.5]" /> }
+  };
+
+  const { bg, icon } = config[color];
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div className={clsx("flex items-center gap-2 p-1.5 pr-2 rounded-2xl shadow-lg transition-all duration-500",
+        checked ? bg : "bg-slate-900/90 border border-white/5")}>
+        <div className="flex items-center justify-center w-8 h-8">
+          {icon}
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" className="sr-only peer" checked={checked} onChange={onChange} />
+          <div className={clsx(
+            "w-16 h-9 rounded-full relative transition-all duration-500 shadow-inner overflow-hidden border-2 border-black/5",
+            checked ? "bg-[#FFD233]" : "bg-gradient-to-br from-blue-900 to-slate-900"
+          )}>
+            {/* Stars for OFF state */}
+            {!checked && (
+              <>
+                <div className="absolute top-2 left-4 w-0.5 h-0.5 bg-white rounded-full animate-pulse"></div>
+                <div className="absolute top-5 left-8 w-1 h-1 bg-white/40 rounded-full animate-bounce delay-100"></div>
+                <div className="absolute top-2 left-10 w-0.5 h-0.5 bg-white/60 rounded-full animate-pulse delay-300"></div>
+              </>
+            )}
+
+            {/* Sun/Moon highlight behind thumb */}
+            <div className={clsx(
+              "absolute top-2 w-5 h-5 rounded-full blur-[2px] transition-all duration-500",
+              checked ? "bg-[#FF9900] left-[18px]" : "bg-blue-400/20 left-[36px]"
+            )}></div>
+
+            <div className={clsx(
+              "absolute top-[2px] w-[30px] h-[30px] rounded-full shadow-md transition-all duration-500 flex items-center justify-center overflow-hidden z-10",
+              checked ? "bg-[#E2EFFF] left-[30px]" : "bg-white left-[2px]"
+            )}>
+              {/* Moon-Craters (only visible when checked/ON as per your moon design, or simple white when OFF) */}
+              {checked ? (
+                <>
+                  <div className="w-1.5 h-1.5 bg-[#BEDAFF] rounded-full absolute top-1.5 left-1.5"></div>
+                  <div className="w-3 h-3 bg-[#BEDAFF] rounded-full absolute bottom-1 left-3.5"></div>
+                  <div className="w-1.5 h-1.5 bg-[#BEDAFF] rounded-full absolute top-2.5 right-2"></div>
+                </>
+              ) : (
+                <div className="w-full h-full bg-slate-100 opacity-20"></div>
+              )}
+            </div>
+          </div>
+        </label>
+      </div>
+      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</span>
+    </div>
+  );
+}
