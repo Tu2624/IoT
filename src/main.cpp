@@ -61,15 +61,16 @@ void applyStaticLeds() {
   digitalWrite(LED_HUMI, ledStates[2] ? HIGH : LOW);
 }
 
-bool publishStatus(const char* trigger) {
+bool publishStatus(const char* trigger, int state = -1) {
   if (!client.connected()) return false;
   if (ESP.getFreeHeap() < 8192) return false;
 
   const char* modeStr = (ledMode == LED_WAVE) ? "wave" : (ledMode == LED_BLINK) ? "blink" : "static";
-  char buffer[160];
+  char buffer[200];
   snprintf(buffer, sizeof(buffer),
-    "{\"status\":\"online\",\"mode\":\"%s\",\"heap\":%u,\"trigger\":\"%s\"}",
-    modeStr, ESP.getFreeHeap(), trigger);
+    "{\"status\":\"online\",\"mode\":\"%s\",\"heap\":%u,\"trigger\":\"%s\",\"led_temp\":%d,\"led_humi\":%d,\"led_bh\":%d}",
+    modeStr, ESP.getFreeHeap(), trigger, ledStates[1] ? 1 : 0, ledStates[2] ? 1 : 0, ledStates[0] ? 1 : 0);
+    
   return client.publish(TOPIC_STATUS, buffer);
 }
 
@@ -119,14 +120,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     applyStaticLeds();
     char triggerName[32];
     snprintf(triggerName, sizeof(triggerName), "led_%s", target);
-    publishStatus(triggerName);
+    publishStatus(triggerName, state);
   }
   else if (strcmp(cmd, "all_lights") == 0) {
     int state = doc["state"];
     ledMode = LED_STATIC;
     ledStates[0] = ledStates[1] = ledStates[2] = (state == 1);
     applyStaticLeds();
-    publishStatus(state == 1 ? "lights_all_on" : "lights_all_off");
+    publishStatus(state == 1 ? "lights_all_on" : "lights_all_off", state);
   }
   else if (strcmp(cmd, "sensor") == 0) {
     const char* target = doc["target"];

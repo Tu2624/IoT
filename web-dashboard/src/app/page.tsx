@@ -1,11 +1,10 @@
 'use client';
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Card from '@/components/Card';
-import { io, Socket } from 'socket.io-client';
-import { Thermometer, Droplets, Sun, Power } from 'lucide-react';
+import { Thermometer, Droplets, Sun } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { clsx } from 'clsx';
-import moment from 'moment';
+import { useDevice } from '@/context/DeviceContext';
 
 interface SensorData {
   time: string;
@@ -17,17 +16,17 @@ interface SensorData {
 const MAX_CHART_POINTS = 5; // Chỉ hiển thị 5 giá trị gần nhất
 
 export default function Dashboard() {
-  const [dataList, setDataList] = useState<SensorData[]>([]);
-  const [current, setCurrent] = useState({ temp: 0, humi: 0, lux: 0 });
+  const {
+    leds,
+    mqttStatus,
+    espStatus,
+    currentSensor,
+    sensorHistory,
+    toggleLed,
+    ledsReady
+  } = useDevice();
+
   const [mounted, setMounted] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
-
-  // States for big LED toggles - khởi tạo null để biết chưa fetch
-  const [leds, setLeds] = useState<{ bh: boolean; temp: boolean; humi: boolean } | null>(null);
-
-  // Connection states
-  const [mqttStatus, setMqttStatus] = useState<'connected' | 'disconnected'>('disconnected');
-  const [espStatus, setEspStatus] = useState<'online' | 'offline'>('offline');
 
   // Pre-compute random positions once
   const fireParticles = useMemo(() => Array.from({ length: 6 }, () => ({
@@ -42,104 +41,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     setMounted(true);
-
-    // === Fetch trạng thái thiết bị từ DB ===
-    fetch('/api/status')
-      .then(res => res.json())
-      .then(json => {
-        if (json.status) {
-          setLeds({
-            temp: json.status.led_temp ?? true,
-            humi: json.status.led_humi ?? true,
-            bh: json.status.led_bh ?? true,
-          });
-        }
-      })
-      .catch(() => {
-        // Fallback mặc định nếu API lỗi
-        setLeds({ bh: true, temp: true, humi: true });
-      });
-
-    // === Fetch 5 giá trị cảm biến gần nhất cho biểu đồ ===
-    fetch('/api/sensors/recent')
-      .then(res => res.json())
-      .then((rows: any[]) => {
-        if (Array.isArray(rows) && rows.length > 0) {
-          const chartData: SensorData[] = rows.map(r => ({
-            time: moment(r.recorded_date).format('HH:mm:ss'),
-            temp: r.temp,
-            humi: r.humi,
-            lux: r.lux,
-          }));
-          setDataList(chartData);
-          // Cập nhật current từ giá trị mới nhất
-          const latest = rows[rows.length - 1];
-          setCurrent({ temp: latest.temp, humi: latest.humi, lux: latest.lux });
-        }
-      })
-      .catch(() => { /* ignore */ });
-
-    // === Init socket ===
-    if (!socketRef.current) {
-      socketRef.current = io(process.env.NEXT_PUBLIC_API_URL || '', { path: '/socket.io' });
-
-      socketRef.current.on('sensor_data', (payload: any) => {
-        const newData: SensorData = {
-          time: moment(payload.recorded_date).format('HH:mm:ss'),
-          temp: payload.temp,
-          humi: payload.humi,
-          lux: payload.lux
-        };
-
-        setCurrent({ temp: payload.temp, humi: payload.humi, lux: payload.lux });
-
-        setDataList((prev) => {
-          const updated = [...prev, newData];
-          // Giữ chỉ 5 điểm gần nhất
-          while (updated.length > MAX_CHART_POINTS) updated.shift();
-          return updated;
-        });
-      });
-
-      socketRef.current.on('mqtt_status', (status: 'connected' | 'disconnected') => {
-        setMqttStatus(status);
-      });
-
-      socketRef.current.on('device_status', (payload: any) => {
-        if (payload.status) {
-          setEspStatus(payload.status);
-        }
-      });
-    }
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.off('sensor_data');
-        socketRef.current.off('mqtt_status');
-        socketRef.current.off('device_status');
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
-    };
   }, []);
 
-  const toggleLed = (ledName: 'bh' | 'temp' | 'humi') => {
-    if (!leds) return; // Chưa load xong trạng thái
-    const newState = !leds[ledName];
-    setLeds(prev => prev ? { ...prev, [ledName]: newState } : prev);
-
-    if (socketRef.current) {
-      socketRef.current.emit('control_device', {
-        cmd: 'led',
-        target: ledName,
-        state: newState ? 1 : 0
-      });
-    }
-  };
-
-  // Hiển thị loading nếu chưa fetch xong trạng thái LED
-  const ledsReady = leds !== null;
-  const safeLeds = leds ?? { bh: true, temp: true, humi: true };
+  const safeLeds = leds;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -191,7 +95,7 @@ export default function Dashboard() {
             <div>
               <p className="text-slate-400 text-sm font-medium">Temperature</p>
               <div className="flex items-baseline gap-1">
-                <h3 className="text-3xl font-bold text-slate-100">{current.temp.toFixed(1)}</h3>
+                <h3 className="text-3xl font-bold text-slate-100">{currentSensor.temp.toFixed(1)}</h3>
                 <span className="text-red-400 text-sm font-semibold">°C</span>
               </div>
             </div>
@@ -212,7 +116,7 @@ export default function Dashboard() {
             <div>
               <p className="text-slate-400 text-sm font-medium">Humidity</p>
               <div className="flex items-baseline gap-1">
-                <h3 className="text-3xl font-bold text-slate-100">{current.humi.toFixed(1)}</h3>
+                <h3 className="text-3xl font-bold text-slate-100">{currentSensor.humi.toFixed(1)}</h3>
                 <span className="text-blue-400 text-sm font-semibold">%</span>
               </div>
             </div>
@@ -229,7 +133,7 @@ export default function Dashboard() {
             <div>
               <p className="text-slate-400 text-sm font-medium">Light</p>
               <div className="flex items-baseline gap-1">
-                <h3 className="text-3xl font-bold text-slate-100">{current.lux.toFixed(0)}</h3>
+                <h3 className="text-3xl font-bold text-slate-100">{currentSensor.lux.toFixed(0)}</h3>
                 <span className="text-yellow-500 text-sm font-semibold">Lx</span>
               </div>
             </div>
@@ -242,7 +146,7 @@ export default function Dashboard() {
         <div className="h-[350px] w-full min-h-[350px]">
           {mounted && (
             <ResponsiveContainer width="100%" height="100%" minHeight={350} minWidth={100}>
-              <LineChart data={dataList} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+              <LineChart data={sensorHistory} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                 <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} tickMargin={10} minTickGap={20} />
                 <YAxis stroke="#94a3b8" fontSize={12} />

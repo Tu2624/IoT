@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { RowDataPacket } from 'mysql2';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     // Lấy trạng thái hiện tại của tất cả thiết bị
@@ -18,9 +20,7 @@ export async function GET() {
     return NextResponse.json({ status });
   } catch (error) {
     console.error('API Error:', error);
-    // Trả default nếu bảng chưa tồn tại
-    return NextResponse.json({ 
-      status: { led_temp: true, led_humi: true, led_bh: true } 
-    });
+    // Trả về lỗi 500 để người dùng thấy lỗi kết nối thực sự thay vì dữ liệu giả
+    return NextResponse.json({ error: 'Database connection failed' }, { status: 500 });
   }
 }

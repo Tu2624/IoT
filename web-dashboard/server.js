@@ -55,7 +55,7 @@ async function initDeviceStatusTable() {
       ('led_humi', 'LED_DO_AM', 1),
       ('led_bh', 'LED_ANH_SANG', 1)
     `);
-    console.log('[DB] Device status table initialized');
+    console.log('[DB] Device status table initialized (Persistence enabled)');
   } catch (e) {
     console.error('[DB] Failed to init device status table:', e.message);
   }
@@ -120,37 +120,25 @@ app.prepare().then(async () => {
         const payload = typeof command === 'object' ? JSON.stringify(command) : command;
         mqttClient.publish('esp32/control', payload);
 
-        // === Lưu trạng thái thiết bị vào DB ngay khi lệnh được gửi ===
+        // === Ghi dòng 'waiting' kèm ý định (online/offline) để đối chiếu chính xác ===
         try {
           if (command.cmd === 'led' && command.target) {
-            const deviceKey = `led_${command.target === 'bh' ? 'bh' : command.target}`;
-            const isOn = command.state === 1 ? 1 : 0;
-            await pool.execute(
-              'UPDATE TRANG_THAI_THIET_BI SET is_on = ? WHERE device_key = ?',
-              [isOn, deviceKey]
-            );
-
-            // Ghi lịch sử thao tác
             const deviceName = mapDeviceName(`led_${command.target}`);
-            const status = isOn ? 'online' : 'offline';
+            const intent = command.state === 1 ? 'online' : 'offline';
             await pool.execute(
               'INSERT INTO BAO_CAO_BAO_MAT (device_name, status, description) VALUES (?, ?, ?)',
-              [deviceName, status, `led_${command.target}`]
+              [deviceName, 'waiting', `Request: led_${command.target}:${intent}`]
             );
           } else if (command.cmd === 'all_lights') {
             const isOn = command.state === 1 ? 1 : 0;
-            await pool.execute(
-              'UPDATE TRANG_THAI_THIET_BI SET is_on = ?',
-              [isOn]
-            );
-            const status = isOn ? 'online' : 'offline';
+            const intent = isOn ? 'online' : 'offline';
             await pool.execute(
               'INSERT INTO BAO_CAO_BAO_MAT (device_name, status, description) VALUES (?, ?, ?)',
-              ['TAT_CA_LED', status, isOn ? 'lights_all_on' : 'lights_all_off']
+              ['TAT_CA_LED', 'waiting', `Request: all_lights:${intent}`]
             );
           }
         } catch (e) {
-          console.error('[DB] Error saving device state:', e.message);
+          console.error('[DB] Error saving waiting log:', e.message);
         }
       }
     });
@@ -179,47 +167,98 @@ app.prepare().then(async () => {
 
       if (topic === 'esp32/sensors') {
         const { temp, humi, hum, lux } = data;
-        const finalHumi = humi !== undefined ? humi : hum; // Backward compatibility
+        const finalHumi = humi !== undefined ? humi : hum;
 
         if (temp !== undefined && finalHumi !== undefined && lux !== undefined) {
           const [result] = await pool.execute(
             'INSERT INTO LICH_SU_DU_LIEU (temp, humi, lux) VALUES (?, ?, ?)',
             [temp, finalHumi, lux]
           );
-          
+
           io.emit('sensor_data', { id: result.insertId, temp, humi: finalHumi, lux, recorded_date: new Date() });
         }
-      } 
+      }
       else if (topic === 'esp32/status') {
-        const { trigger, status } = data;
+        let { trigger, status } = data;
         if (status === 'online') lastEspSeen = Date.now();
-        
+
+        // 1. Chuẩn hóa trạng thái siêu nhạy: 'online' hoặc 'offline'
+        // Chấp nhận mọi biến thể: 1/0, on/off, ON/OFF, true/false
+        const s = String(status || '').toLowerCase();
+        const normalizedStatus = (s === 'online' || s === 'on' || s === '1' || s === 'true')
+          ? 'online'
+          : 'offline';
+
+        console.log(`[MQTT Status] Trigger: ${trigger} | Raw: ${status} | Final: ${normalizedStatus}`);
+
         if (trigger) {
           const deviceName = mapDeviceName(trigger);
+          const deviceKey = trigger.startsWith('led_') ? trigger : null;
 
-          // Cập nhật trạng thái thiết bị nếu là LED
-          if (trigger.startsWith('led_')) {
-            const deviceKey = trigger; // led_temp, led_humi, led_bh
-            // Xác định trạng thái On/Off từ payload ESP32
-            try {
+          try {
+            // 2. Lấy trạng thái hiện tại từ DB để so sánh
+            let currentStatus = '';
+            if (deviceKey) {
+              const [rows] = await pool.execute('SELECT status FROM TRANG_THAI_THIET_BI WHERE device_key = ?', [deviceKey]);
+              if (rows.length > 0) currentStatus = rows[0].status;
+            }
+
+            // 3. XÁC ĐỊNH TRẠNG THÁI CUỐI CÙNG (Ưu tiên trường 'state' mới từ ESP32)
+            let finalStatus = normalizedStatus;
+
+            // Thử tìm dòng 'waiting' gần nhất
+            const [waitingRows] = await pool.execute(
+              'SELECT description FROM BAO_CAO_BAO_MAT WHERE device_name = ? AND status = ? ORDER BY report_id DESC LIMIT 1',
+              [deviceName, 'waiting']
+            );
+
+            if (waitingRows.length > 0) {
+              const description = waitingRows[0].description;
+              // Nếu ESP32 có gửi trường 'state' (firmware mới), dùng nó luôn
+              if (data.state !== undefined) {
+                finalStatus = data.state === 1 ? 'online' : 'offline';
+              }
+              // Nếu không (firmware cũ), bóc tách ý định từ description (led_temp:offline -> offline)
+              else if (description.includes(':')) {
+                finalStatus = description.split(':').pop();
+              }
+
+              // Cập nhật dòng 'waiting' thành trạng thái cuối cùng
               await pool.execute(
-                'UPDATE TRANG_THAI_THIET_BI SET is_on = CASE WHEN is_on = 1 THEN 0 ELSE 1 END WHERE device_key = ?',
-                [deviceKey]
+                'UPDATE BAO_CAO_BAO_MAT SET status = ?, description = ?, report_date = NOW() WHERE device_name = ? AND status = ? ORDER BY report_id DESC LIMIT 1',
+                [finalStatus, `Success: ${trigger}`, deviceName, 'waiting']
               );
-            } catch (e) { /* ignore */ }
-          } else if (trigger.startsWith('lights_all')) {
-            const isOn = trigger === 'lights_all_on' ? 1 : 0;
-            try {
-              await pool.execute('UPDATE TRANG_THAI_THIET_BI SET is_on = ?', [isOn]);
-            } catch (e) { /* ignore */ }
+            } else if (isStatusChanged) {
+              // 4. Nếu không có 'waiting' (bấm nút vật lý), ghi log mới
+              await pool.execute(
+                'INSERT INTO BAO_CAO_BAO_MAT (device_name, status, description) VALUES (?, ?, ?)',
+                [deviceName, normalizedStatus, trigger]
+              );
+            }
+
+            // 5. Luôn cập nhật DB trạng thái thực tế khi có kết quả mới
+            const updatedOn = finalStatus === 'online' ? 1 : 0;
+
+            // Xử lý lưu trạng thái: Nếu là lệnh điều khiển tất cả -> Cập nhật cả 3 đèn
+            if (trigger.includes('lights_all')) {
+              await pool.execute('UPDATE TRANG_THAI_THIET_BI SET is_on = ?', [updatedOn]);
+            }
+            // Đèn đơn lẻ
+            else if (deviceKey) {
+              await pool.execute('UPDATE TRANG_THAI_THIET_BI SET is_on = ? WHERE device_key = ?', [updatedOn, deviceKey]);
+            }
+
+            // === ĐỒNG BỘ HÓA TOÀN DIỆN (Dành cho cả Heartbeat và hành động) ===
+            // Nếu bản tin có chứa trạng thái cụ thể của từng đèn, cập nhật luôn để khớp 100% phần cứng
+            if (data.led_temp !== undefined) await pool.execute('UPDATE TRANG_THAI_THIET_BI SET is_on = ? WHERE device_key = ?', [data.led_temp, 'led_temp']);
+            if (data.led_humi !== undefined) await pool.execute('UPDATE TRANG_THAI_THIET_BI SET is_on = ? WHERE device_key = ?', [data.led_humi, 'led_humi']);
+            if (data.led_bh !== undefined) await pool.execute('UPDATE TRANG_THAI_THIET_BI SET is_on = ? WHERE device_key = ?', [data.led_bh, 'led_bh']);
+
+          } catch (e) {
+            console.error('[DB] Error processing device status log:', e.message);
           }
 
-          await pool.execute(
-            'INSERT INTO BAO_CAO_BAO_MAT (device_name, status, description) VALUES (?, ?, ?)',
-            [deviceName, status, trigger]
-          );
-          
-          io.emit('device_status', data);
+          io.emit('device_status', { ...data, status: normalizedStatus });
         }
       }
     } catch (error) {
