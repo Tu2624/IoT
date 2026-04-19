@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Card from '@/components/Card';
 import moment from 'moment';
 import { clsx } from 'clsx';
-import { Search, Filter, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 interface ActionRecord {
   report_id: number;
@@ -88,8 +88,7 @@ export default function ActionHistory() {
 
       if (searchQuery) params.set('search', searchQuery);
       if (searchTime) {
-        const formatted = moment(searchTime).format('YYYY-MM-DD HH:mm');
-        params.set('searchTime', formatted);
+        params.set('searchTime', searchTime);
       }
       if (combinedFilter !== 'all') params.set('filter', combinedFilter);
 
@@ -205,15 +204,29 @@ export default function ActionHistory() {
             />
           </div>
 
-          {/* Single Time Filter */}
-          <div className="relative">
+          {/* Single Time Filter with Picker */}
+          <div className="relative flex">
             <input
-              type="datetime-local"
-              title="Chọn thời gian chính xác"
+              type="text"
+              placeholder="Tìm theo thời gian..."
+              title="Tìm theo thời gian (Có thể dán)"
               value={searchTime}
               onChange={e => setSearchTime(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2 placeholder:text-slate-500"
+              className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-l-lg focus:ring-blue-500 focus:border-blue-500 block w-[160px] p-2 placeholder:text-slate-500"
             />
+            <div className="relative bg-slate-800 border border-l-0 border-slate-700 rounded-r-lg flex items-center justify-center px-3 hover:bg-slate-700 transition cursor-pointer" title="Chọn từ lịch">
+              <Calendar className="w-4 h-4 text-slate-400" />
+              <input
+                type="datetime-local"
+                step="1"
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                onChange={e => {
+                  if (e.target.value) {
+                    setSearchTime(moment(e.target.value).format('YYYY-MM-DD HH:mm:ss'));
+                  }
+                }}
+              />
+            </div>
           </div>
 
           {/* Combined Filter */}
@@ -269,7 +282,7 @@ export default function ActionHistory() {
                       </span>
                     </td>
                     <td className="py-3 px-4 text-slate-300 font-mono text-xs bg-slate-800 p-1 rounded max-w-max my-2">{row.description}</td>
-                    <td className="py-3 px-4 text-slate-300">{moment(row.report_date).format('HH:mm:ss - DD/MM/YYYY')}</td>
+                    <td className="py-3 px-4 text-slate-300 font-mono text-xs whitespace-nowrap">{moment(row.report_date).format('YYYY-MM-DD HH:mm:ss')}</td>
                   </tr>
                 ))
               )}

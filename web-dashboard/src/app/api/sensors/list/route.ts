@@ -20,14 +20,22 @@ export async function GET(request: NextRequest) {
     const params: any[] = [];
 
     if (search) {
-      conditions.push('(CAST(temp AS CHAR) LIKE ? OR CAST(humi AS CHAR) LIKE ? OR CAST(lux AS CHAR) LIKE ?)');
+      conditions.push(`(
+        CAST(temp AS CHAR) LIKE ? OR 
+        CAST(humi AS CHAR) LIKE ? OR 
+        CAST(lux AS CHAR) LIKE ? OR 
+        CAST(ROUND(temp, 2) AS CHAR) LIKE ? OR
+        CAST(ROUND(humi, 2) AS CHAR) LIKE ? OR
+        CAST(ROUND(lux, 2) AS CHAR) LIKE ? OR
+        DATE_FORMAT(recorded_date, '%Y-%m-%d %H:%i:%s') LIKE ?
+      )`);
       const searchLike = `%${search}%`;
-      params.push(searchLike, searchLike, searchLike);
+      params.push(searchLike, searchLike, searchLike, searchLike, searchLike, searchLike, searchLike);
     }
 
     if (searchTime) {
-      conditions.push('DATE_FORMAT(recorded_date, "%Y-%m-%d %H:%i") = ?');
-      params.push(searchTime);
+      conditions.push('DATE_FORMAT(recorded_date, "%Y-%m-%d %H:%i:%s") LIKE ?');
+      params.push(`%${searchTime}%`);
     }
 
     // Validate sort columns

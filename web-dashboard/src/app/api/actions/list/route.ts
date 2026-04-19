@@ -20,14 +20,14 @@ export async function GET(request: NextRequest) {
     const params: any[] = [];
 
     if (search) {
-      conditions.push('(CAST(report_id AS CHAR) LIKE ? OR device_name LIKE ? OR status LIKE ? OR description LIKE ?)');
+      conditions.push('(CAST(report_id AS CHAR) LIKE ? OR device_name LIKE ? OR status LIKE ? OR description LIKE ? OR CAST(report_date AS CHAR) LIKE ?)');
       const searchLike = `%${search}%`;
-      params.push(searchLike, searchLike, searchLike, searchLike);
+      params.push(searchLike, searchLike, searchLike, searchLike, searchLike);
     }
 
     if (searchTime) {
-      conditions.push('DATE_FORMAT(report_date, "%Y-%m-%d %H:%i") = ?');
-      params.push(searchTime);
+      conditions.push('DATE_FORMAT(report_date, "%Y-%m-%d %H:%i:%s") LIKE ?');
+      params.push(`%${searchTime}%`);
     }
 
     // Combined filter: device or status

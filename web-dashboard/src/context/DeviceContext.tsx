@@ -24,36 +24,37 @@ interface DeviceContextType {
   sensorHistory: SensorData[];
   toggleLed: (ledName: keyof LedsState) => void;
   ledsReady: boolean;
+  alert: { message: string; type: 'error' | 'success' | null };
+  clearAlert: () => void;
 }
 
 const DeviceContext = createContext<DeviceContextType | undefined>(undefined);
 
 export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Mặc định khởi tạo là false (Tắt) để chờ dữ liệu thực từ DB
   const [leds, setLeds] = useState<LedsState>({ bh: false, temp: false, humi: false });
   const [ledsReady, setLedsReady] = useState(false);
   const [mqttStatus, setMqttStatus] = useState<'connected' | 'disconnected'>('disconnected');
   const [espStatus, setEspStatus] = useState<'online' | 'offline'>('offline');
   const [currentSensor, setCurrentSensor] = useState({ temp: 0, humi: 0, lux: 0 });
   const [sensorHistory, setSensorHistory] = useState<SensorData[]>([]);
+  const [alert, setAlert] = useState<{ message: string; type: 'error' | 'success' | null }>({ message: '', type: null });
+  const pendingTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
 
   const socketRef = useRef<Socket | null>(null);
   const MAX_CHART_POINTS = 5;
 
-  // === Khởi tạo Socket và Fetch trạng thái ban đầu ===
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Fetch trạng thái từ DB để đồng bộ
     const fetchInitialStatus = async () => {
       try {
         const res = await fetch('/api/status');
         const json = await res.json();
         if (isMounted && json.status) {
           setLeds({
-            temp: json.status.led_temp ?? true,
-            humi: json.status.led_humi ?? true,
-            bh: json.status.led_bh ?? true,
+            temp: json.status.led_temp === true,
+            humi: json.status.led_humi === true,
+            bh: json.status.led_bh === true,
           });
         }
       } catch (err) {
@@ -65,7 +66,6 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     fetchInitialStatus();
 
-    // 2. Fetch dữ liệu biểu đồ
     fetch('/api/sensors/recent')
       .then(res => res.json())
       .then((rows: any[]) => {
@@ -83,7 +83,6 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       })
       .catch(() => { });
 
-    // 3. Init Socket
     if (!socketRef.current) {
       socketRef.current = io(process.env.NEXT_PUBLIC_API_URL || '', { path: '/socket.io' });
 
@@ -114,11 +113,17 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (payload.status) {
           if (payload.trigger === 'heartbeat_timeout') {
             setEspStatus('offline');
+            // Cố tình KHÔNG clear bộ đếm pendingTimeouts ở đây.
+            // Để cho chúng tự động chạy hết 5s để trigger hàm hoàn tác (revert) nút bấm và hiện dòng thông báo!
           } else {
             setEspStatus('online');
+            if (payload.trigger && pendingTimeouts.current[payload.trigger]) {
+              console.log(`[SUCCESS] Command ${payload.trigger} confirmed.`);
+              clearTimeout(pendingTimeouts.current[payload.trigger]);
+              delete pendingTimeouts.current[payload.trigger];
+            }
           }
         }
-        // Gỡ bỏ phần tự động cập nhật leds từ payload.trigger để tránh xung đột thao tác
       });
     }
 
@@ -128,17 +133,16 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   const toggleLed = useCallback((ledName: keyof LedsState) => {
-    // Tính toán trạng thái mới dựa trên trạng thái hiện tại (Ref hoặc State)
-    setLeds(prev => {
-      const newState = !prev[ledName];
+    if (espStatus === 'offline') {
+      setAlert({ message: 'Thiết bị đang mất kết nối!', type: 'error' });
+      return;
+    }
 
-      // DI CHUYỂN VIỆC GỬI LỆNH RA KHỎI ĐÂY LÀ TỐT NHẤT, NHƯNG NẾU DÙNG UPDATER THÌ PHẢI CẨN THẬN
-      // Để triệt để, chúng ta sẽ gọi emit sau khi setLeds (trong một function độc lập)
-      return { ...prev, [ledName]: newState };
-    });
+    const prevState = leds[ledName];
+    const newState = !prevState;
 
-    // LẤY TRẠNG THÁI HIỆN TẠI ĐỂ ĐẢO (Vì toggleLed sẽ được gọi lại khi leds thay đổi)
-    const newState = !leds[ledName];
+    setLeds(prev => ({ ...prev, [ledName]: newState }));
+
     if (socketRef.current) {
       socketRef.current.emit('control_device', {
         cmd: 'led',
@@ -146,7 +150,38 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         state: newState ? 1 : 0
       });
     }
-  }, [leds]); // Thêm leds vào dependency để lấy giá trị mới nhất
+
+    const timeoutKey = `led_${ledName}`;
+    if (pendingTimeouts.current[timeoutKey]) {
+      clearTimeout(pendingTimeouts.current[timeoutKey]);
+    }
+
+    pendingTimeouts.current[timeoutKey] = setTimeout(async () => {
+      console.warn(`[TIMEOUT] No response for ${timeoutKey}. Reverting...`);
+      setLeds(prev => ({ ...prev, [ledName]: prevState }));
+      setAlert({ message: 'Không phản hồi', type: 'error' });
+      
+      try {
+        await fetch('/api/actions/report-failure', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            device_key: timeoutKey,
+            status: 'error',
+            description: 'Thiết bị không phản hồi lệnh điều khiển (Timeout 5s)'
+          })
+        });
+      } catch (e) {
+        console.error('Failed to log failure:', e);
+      }
+
+      delete pendingTimeouts.current[timeoutKey];
+    }, 5000);
+  }, [leds, espStatus]);
+
+  const clearAlert = useCallback(() => {
+    setAlert({ message: '', type: null });
+  }, []);
 
   return (
     <DeviceContext.Provider value={{
@@ -156,7 +191,9 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       currentSensor,
       sensorHistory,
       toggleLed,
-      ledsReady
+      ledsReady,
+      alert,
+      clearAlert
     }}>
       {children}
     </DeviceContext.Provider>

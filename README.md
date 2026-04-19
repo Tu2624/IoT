@@ -61,7 +61,7 @@ Dự án được chia làm 2 thành phần chính đặt trong cùng một Repo
    DB_PORT=3306
 
    MQTT_HOST=172.20.10.2
-   MQTT_PORT=1883
+   MQTT_PORT=2004
    MQTT_USER=YOUR_USER
    MQTT_PASSWORD=YOUR_PASS
    ```

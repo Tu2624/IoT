@@ -92,13 +92,13 @@ app.prepare().then(async () => {
   setInterval(async () => {
     try {
       await pool.execute(
-        'DELETE FROM LICH_SU_DU_LIEU WHERE recorded_date < DATE_SUB(NOW(), INTERVAL 24 HOUR)'
+        'DELETE FROM LICH_SU_DU_LIEU WHERE recorded_date < DATE_SUB(NOW(), INTERVAL 72 HOUR)'
       );
     } catch (e) { /* ignore cleanup errors */ }
   }, 10 * 60 * 1000);
 
   // Initialize MQTT Client
-  const mqttClient = mqtt.connect(`mqtt://${process.env.MQTT_HOST || '172.20.10.2'}:${process.env.MQTT_PORT || 1883}`, {
+  const mqttClient = mqtt.connect(`mqtt://${process.env.MQTT_HOST || '172.20.10.2'}:${process.env.MQTT_PORT || 2004}`, {
     username: process.env.MQTT_USER || 'B22DCPT244',
     password: process.env.MQTT_PASSWORD || '123456',
     clientId: 'Nextjs_Dashboard_Server_' + Math.random().toString(16).substr(2, 8),
@@ -166,6 +166,7 @@ app.prepare().then(async () => {
       const data = JSON.parse(payload);
 
       if (topic === 'esp32/sensors') {
+        lastEspSeen = Date.now(); // Cập nhật heartbeat vì ESP32 vẫn đang bơm dữ liệu Sensor!
         const { temp, humi, hum, lux } = data;
         const finalHumi = humi !== undefined ? humi : hum;
 
@@ -191,7 +192,27 @@ app.prepare().then(async () => {
 
         console.log(`[MQTT Status] Trigger: ${trigger} | Raw: ${status} | Final: ${normalizedStatus}`);
 
-        if (trigger) {
+        if (trigger === 'connect' || trigger === 'lwt') {
+          // ĐỒNG BỘ: Nếu thiết bị vừa bật lên, lấy dữ liệu DB và bắt thiết bị đổi theo DB
+          if (trigger === 'connect') {
+            try {
+              const [devices] = await pool.execute('SELECT device_key, is_on FROM TRANG_THAI_THIET_BI');
+
+              let syncPayload = { cmd: 'sync', temp: 0, humi: 0, bh: 0 };
+
+              devices.forEach((device) => {
+                if (device.device_key === 'led_temp') syncPayload.temp = device.is_on;
+                if (device.device_key === 'led_humi') syncPayload.humi = device.is_on;
+                if (device.device_key === 'led_bh') syncPayload.bh = device.is_on;
+              });
+
+              // Bắn thẳng xuống ngay lập tức không cần đợi vì Mosquitto đảm bảo tính tuần tự
+              mqttClient.publish('esp32/control', JSON.stringify(syncPayload));
+              console.log(`[SYNC] Bulk sync sent to ESP32 INMEDIATELY:`, syncPayload);
+            } catch (e) { console.error('[SYNC ERR]', e.message); }
+          }
+        }
+        else if (trigger) {
           const deviceName = mapDeviceName(trigger);
           const deviceKey = trigger.startsWith('led_') ? trigger : null;
 
@@ -200,7 +221,7 @@ app.prepare().then(async () => {
             let currentStatus = '';
             if (deviceKey) {
               const [rows] = await pool.execute('SELECT status FROM TRANG_THAI_THIET_BI WHERE device_key = ?', [deviceKey]);
-              if (rows.length > 0) currentStatus = rows[0].status;
+              if (rows.length > 0) currentStatus = rows[0].is_on ? 'online' : 'offline';
             }
 
             // 3. XÁC ĐỊNH TRẠNG THÁI CUỐI CÙNG (Ưu tiên trường 'state' mới từ ESP32)
@@ -228,8 +249,8 @@ app.prepare().then(async () => {
                 'UPDATE BAO_CAO_BAO_MAT SET status = ?, description = ?, report_date = NOW() WHERE device_name = ? AND status = ? ORDER BY report_id DESC LIMIT 1',
                 [finalStatus, `Success: ${trigger}`, deviceName, 'waiting']
               );
-            } else if (isStatusChanged) {
-              // 4. Nếu không có 'waiting' (bấm nút vật lý), ghi log mới
+            } else {
+              // 4. Nếu không có 'waiting' (bấm nút vật lý), ghi log mới. (Đã bỏ logic isStatusChanged gây lỗi)
               await pool.execute(
                 'INSERT INTO BAO_CAO_BAO_MAT (device_name, status, description) VALUES (?, ?, ?)',
                 [deviceName, normalizedStatus, trigger]

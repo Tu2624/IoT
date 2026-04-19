@@ -15,7 +15,7 @@ Hệ thống Fullstack Website giám sát và điều khiển thiết bị IoT (
 ### Yêu cầu tiên quyết (Prerequisites)
 1. Đã cài Node.js (version 16+).
 2. XAMPP hoặc máy chủ MySQL đang bật ở port 3306.
-3. MQTT Broker (Eclipse Mosquitto) đang chạy ở LAN (`172.20.10.2:1883`)
+3. MQTT Broker (Eclipse Mosquitto) đang chạy ở LAN (`172.20.10.2:2004`)
 
 ### 1. Thiết lập Cơ sở dữ liệu
 Nạp file `../schema.sql` vào MySQL để tạo database `iot_dashboard` và các table cần dùng (`LICH_SU_DU_LIEU`, `BAO_CAO_BAO_MAT`).
@@ -30,7 +30,7 @@ DB_NAME=iot_dashboard
 DB_PORT=3306
 
 MQTT_HOST=172.20.10.2
-MQTT_PORT=1883
+MQTT_PORT=2004
 MQTT_USER=B22DCPT244
 MQTT_PASSWORD=123456
 ```

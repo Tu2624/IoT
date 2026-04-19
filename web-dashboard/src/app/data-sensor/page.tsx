@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import Card from '@/components/Card';
-import { Search, Filter, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import moment from 'moment';
 import { clsx } from 'clsx';
 
@@ -73,9 +73,7 @@ export default function DataSensor() {
 
       if (searchQuery) params.set('search', searchQuery);
       if (searchTime) {
-        // Chuyển datetime-local sang format YYYY-MM-DD HH:mm
-        const formatted = moment(searchTime).format('YYYY-MM-DD HH:mm');
-        params.set('searchTime', formatted);
+        params.set('searchTime', searchTime);
       }
 
       const res = await fetch(`/api/sensors/list?${params.toString()}`);
@@ -123,37 +121,56 @@ export default function DataSensor() {
   const flattenedData: FlatSensorRecord[] = [];
   let index = (pagination.page - 1) * pagination.limit * 3 + 1;
 
+  const searchLower = searchQuery.toLowerCase();
+  const timeSearchLower = searchTime.toLowerCase();
+
   data.forEach(row => {
-    if (quickFilter === 'all' || quickFilter === 'temp') {
+    const tempStr = `${Number(row.temp).toFixed(2)}`;
+    const humiStr = `${Number(row.humi).toFixed(2)}`;
+    const luxStr = `${Number(row.lux).toFixed(2)}`;
+    const dateStr = moment(row.recorded_date).format('YYYY-MM-DD HH:mm:ss');
+
+    // Check if a specific value matches the searches
+    const matchesGlobal = (valStr: string) => {
+      if (!searchQuery) return true;
+      return valStr.includes(searchLower);
+    };
+
+    const matchesTime = () => {
+      if (!searchTime) return true;
+      return dateStr.includes(timeSearchLower);
+    };
+
+    if ((quickFilter === 'all' || quickFilter === 'temp') && matchesGlobal(tempStr) && matchesTime()) {
       flattenedData.push({
         id: index.toString().padStart(2, '0'),
         history_id: row.history_id,
         sensor_name: 'Cảm biến nhiệt độ',
-        valueStr: `${Number(row.temp).toFixed(0)}°C`,
+        valueStr: `${tempStr}°C`,
         rawValue: row.temp,
         type: 'temp',
         recorded_date: row.recorded_date
       });
       index++;
     }
-    if (quickFilter === 'all' || quickFilter === 'humi') {
+    if ((quickFilter === 'all' || quickFilter === 'humi') && matchesGlobal(humiStr) && matchesTime()) {
       flattenedData.push({
         id: index.toString().padStart(2, '0'),
         history_id: row.history_id,
         sensor_name: 'Cảm biến độ ẩm',
-        valueStr: `${Number(row.humi).toFixed(0)}%`,
+        valueStr: `${humiStr}%`,
         rawValue: row.humi,
         type: 'humi',
         recorded_date: row.recorded_date
       });
       index++;
     }
-    if (quickFilter === 'all' || quickFilter === 'lux') {
+    if ((quickFilter === 'all' || quickFilter === 'lux') && matchesGlobal(luxStr) && matchesTime()) {
       flattenedData.push({
         id: index.toString().padStart(2, '0'),
         history_id: row.history_id,
         sensor_name: 'Cảm biến ánh sáng',
-        valueStr: `${Number(row.lux).toFixed(0)}Lx`,
+        valueStr: `${luxStr}Lx`,
         rawValue: row.lux,
         type: 'lux',
         recorded_date: row.recorded_date
@@ -243,15 +260,29 @@ export default function DataSensor() {
             />
           </div>
 
-          {/* Single Time Filter */}
-          <div className="relative">
+          {/* Single Time Filter with Picker */}
+          <div className="relative flex">
             <input
-              type="datetime-local"
-              title="Chọn thời gian chính xác"
+              type="text"
+              placeholder="Tìm theo thời gian..."
+              title="Tìm theo thời gian (Có thể dán)"
               value={searchTime}
               onChange={e => setSearchTime(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2 placeholder:text-slate-500"
+              className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-l-lg focus:ring-blue-500 focus:border-blue-500 block w-[160px] p-2 placeholder:text-slate-500"
             />
+            <div className="relative bg-slate-800 border border-l-0 border-slate-700 rounded-r-lg flex items-center justify-center px-3 hover:bg-slate-700 transition cursor-pointer" title="Chọn từ lịch">
+              <Calendar className="w-4 h-4 text-slate-400" />
+              <input
+                type="datetime-local"
+                step="1"
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                onChange={e => {
+                  if (e.target.value) {
+                    setSearchTime(moment(e.target.value).format('YYYY-MM-DD HH:mm:ss'));
+                  }
+                }}
+              />
+            </div>
           </div>
 
           {/* Sensor Filter */}
@@ -300,7 +331,7 @@ export default function DataSensor() {
                     <td className="py-3 px-4 text-slate-400">{row.id}</td>
                     <td className="py-3 px-4 text-slate-200">{row.sensor_name}</td>
                     <td className="py-3 px-4 font-medium">{row.valueStr}</td>
-                    <td className="py-3 px-4 text-slate-300">{moment(row.recorded_date).format('HH:mm-DD/MM/YYYY')}</td>
+                    <td className="py-3 px-4 text-slate-300 font-mono text-xs whitespace-nowrap">{moment(row.recorded_date).format('YYYY-MM-DD HH:mm:ss')}</td>
                   </tr>
                 ))
               )}

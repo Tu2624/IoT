@@ -23,8 +23,17 @@ export default function Dashboard() {
     currentSensor,
     sensorHistory,
     toggleLed,
-    ledsReady
+    ledsReady,
+    alert,
+    clearAlert
   } = useDevice();
+
+  useEffect(() => {
+    if (alert && alert.message) {
+      const timer = setTimeout(() => clearAlert(), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [alert, clearAlert]);
 
   const [mounted, setMounted] = useState(false);
 
@@ -163,6 +172,18 @@ export default function Dashboard() {
           )}
         </div>
       </Card>
+
+      {/* Toast Notification */}
+      {alert && alert.message && (
+        <div className={clsx(
+          "fixed top-24 right-6 px-4 py-3 rounded-xl shadow-2xl border backdrop-blur-md z-50 flex items-center gap-3 transition-all duration-300 animate-in slide-in-from-right-8",
+          alert.type === 'error' ? "bg-rose-900/90 border-rose-500/50 text-rose-200" : "bg-emerald-900/90 border-emerald-500/50 text-emerald-200"
+        )}>
+          <div className={clsx("w-2 h-2 rounded-full animate-pulse", alert.type === 'error' ? "bg-rose-400" : "bg-emerald-400")} />
+          <span className="font-medium text-sm drop-shadow-sm">{alert.message}</span>
+          <button onClick={clearAlert} className="ml-2 text-white/50 hover:text-white pb-0.5 transition-colors">✕</button>
+        </div>
+      )}
     </div>
   );
 }

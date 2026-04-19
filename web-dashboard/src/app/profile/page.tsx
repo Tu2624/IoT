@@ -76,11 +76,11 @@ export default function Profile() {
                 <LayoutTemplate className="w-6 h-6 text-pink-400 group-hover:text-pink-300" />
                 <span className="font-medium text-slate-300 group-hover:text-white">Figma</span>
               </a>
-              <a href="#" className="flex items-center gap-3 p-4 rounded-xl border border-slate-700/50 bg-slate-800/40 hover:bg-slate-700/60 hover:border-slate-600 transition-all group">
+              <a href="/Bao_cao_IOT.pdf" target="_blank" className="flex items-center gap-3 p-4 rounded-xl border border-slate-700/50 bg-slate-800/40 hover:bg-slate-700/60 hover:border-slate-600 transition-all group">
                 <FileText className="w-6 h-6 text-red-400 group-hover:text-red-300" />
                 <span className="font-medium text-slate-300 group-hover:text-white">Báo cáo PDF</span>
               </a>
-              <a href="#" className="flex items-center gap-3 p-4 rounded-xl border border-slate-700/50 bg-slate-800/40 hover:bg-slate-700/60 hover:border-slate-600 transition-all group">
+              <a href="/api-docs" className="flex items-center gap-3 p-4 rounded-xl border border-slate-700/50 bg-slate-800/40 hover:bg-slate-700/60 hover:border-slate-600 transition-all group">
                 <Braces className="w-6 h-6 text-green-400 group-hover:text-green-300" />
                 <span className="font-medium text-slate-300 group-hover:text-white">API Docs</span>
               </a>
