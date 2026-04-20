@@ -5,21 +5,12 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <Wire.h>
-#include <rom/rtc.h> // Thêm thư viện để kiểm tra lý do Reset
+#include <rom/rtc.h>
 
-// --- Cấu hình Pin ---
-#define LED_TEMP 27
-#define LED_BH 26
-#define LED_HUMI 5
-#define DHTPIN 4
-#define DHTTYPE DHT11
-
-// --- MQTT Topics ---
 #define TOPIC_SENSORS "esp32/sensors"
 #define TOPIC_CONTROL "esp32/control"
 #define TOPIC_STATUS "esp32/status"
 
-// --- Biến quản lý thời gian (Non-blocking) ---
 unsigned long lastSensorTime = 0;
 const long sensorInterval = 2000;
 
@@ -36,29 +27,54 @@ const long reconnectInterval = 5000;
 unsigned long lastMonitorTime = 0;
 const long monitorInterval = 10000;
 unsigned long lastWiFiCheckTime = 0;
-const long wifiCheckInterval = 5000; // Check wifi every 5 seconds
+const long wifiCheckInterval = 5000;
 
-// --- Trạng thái thiết bị ---
 enum LedMode { LED_STATIC, LED_WAVE, LED_BLINK };
 LedMode ledMode = LED_STATIC;
 
-bool ledStates[3] = {true, true, true}; // BH=0, TEMP=1, HUMI=2
+constexpr int LED_COUNT = 5;
+const int LED_PINS[LED_COUNT] = {LED_BH_PIN, LED_TEMP_PIN, LED_HUMI_PIN, LED1_PIN, LED2_PIN};
+
+enum LedIndex {
+  LED_BH_INDEX = 0,
+  LED_TEMP_INDEX,
+  LED_HUMI_INDEX,
+  LED1_INDEX,
+  LED2_INDEX
+};
+
+bool ledStates[LED_COUNT] = {true, true, true, true, true};
 
 bool sensorsEnabled = true;
 bool readTemp = true;
 bool readHumi = true;
 bool readLux = true;
 
-// Khởi tạo đối tượng
 DHT dht(DHTPIN, DHTTYPE);
 BH1750 lightMeter;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
 void applyStaticLeds() {
-  digitalWrite(LED_BH, ledStates[0] ? HIGH : LOW);
-  digitalWrite(LED_TEMP, ledStates[1] ? HIGH : LOW);
-  digitalWrite(LED_HUMI, ledStates[2] ? HIGH : LOW);
+  for (int i = 0; i < LED_COUNT; i++) {
+    digitalWrite(LED_PINS[i], ledStates[i] ? HIGH : LOW);
+  }
+}
+
+int getLedIndex(const char *target) {
+  if (!target)
+    return -1;
+  if (strcmp(target, "bh") == 0)
+    return LED_BH_INDEX;
+  if (strcmp(target, "temp") == 0)
+    return LED_TEMP_INDEX;
+  if (strcmp(target, "humi") == 0)
+    return LED_HUMI_INDEX;
+  if (strcmp(target, "led1") == 0)
+    return LED1_INDEX;
+  if (strcmp(target, "led2") == 0)
+    return LED2_INDEX;
+  return -1;
 }
 
 bool publishStatus(const char *trigger, int state = -1) {
@@ -67,21 +83,22 @@ bool publishStatus(const char *trigger, int state = -1) {
   if (ESP.getFreeHeap() < 8192)
     return false;
 
-  const char *modeStr = (ledMode == LED_WAVE)    ? "wave"
+  const char *modeStr = (ledMode == LED_WAVE) ? "wave"
                         : (ledMode == LED_BLINK) ? "blink"
                                                  : "static";
-  char buffer[200];
+
+  char buffer[256];
   snprintf(buffer, sizeof(buffer),
-           "{\"status\":\"online\",\"mode\":\"%s\",\"heap\":%u,\"trigger\":\"%"
-           "s\",\"led_temp\":%d,\"led_humi\":%d,\"led_bh\":%d}",
-           modeStr, ESP.getFreeHeap(), trigger, ledStates[1] ? 1 : 0,
-           ledStates[2] ? 1 : 0, ledStates[0] ? 1 : 0);
+           "{\"status\":\"online\",\"mode\":\"%s\",\"heap\":%u,\"trigger\":\"%s\","
+           "\"led_temp\":%d,\"led_humi\":%d,\"led_bh\":%d,\"led1\":%d,\"led2\":%d}",
+           modeStr, ESP.getFreeHeap(), trigger, ledStates[LED_TEMP_INDEX] ? 1 : 0,
+           ledStates[LED_HUMI_INDEX] ? 1 : 0, ledStates[LED_BH_INDEX] ? 1 : 0,
+           ledStates[LED1_INDEX] ? 1 : 0, ledStates[LED2_INDEX] ? 1 : 0);
 
   return client.publish(TOPIC_STATUS, buffer);
 }
 
 void mqttCallback(char *topic, byte *payload, unsigned int length) {
-  // Bỏ printf liên tục để tránh nghẽn luồng
   if (strcmp(topic, TOPIC_CONTROL) != 0)
     return;
 
@@ -118,30 +135,33 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
   } else if (strcmp(cmd, "led") == 0) {
     const char *target = doc["target"];
     int state = doc["state"];
+    int ledIndex = getLedIndex(target);
+
+    if (ledIndex < 0)
+      return;
+
     ledMode = LED_STATIC;
-
-    if (strcmp(target, "bh") == 0)
-      ledStates[0] = (state == 1);
-    else if (strcmp(target, "temp") == 0)
-      ledStates[1] = (state == 1);
-    else if (strcmp(target, "humi") == 0)
-      ledStates[2] = (state == 1);
-
+    ledStates[ledIndex] = (state == 1);
     applyStaticLeds();
+
     char triggerName[32];
     snprintf(triggerName, sizeof(triggerName), "led_%s", target);
     publishStatus(triggerName, state);
   } else if (strcmp(cmd, "all_lights") == 0) {
     int state = doc["state"];
     ledMode = LED_STATIC;
-    ledStates[0] = ledStates[1] = ledStates[2] = (state == 1);
+    for (int i = 0; i < LED_COUNT; i++) {
+      ledStates[i] = (state == 1);
+    }
     applyStaticLeds();
     publishStatus(state == 1 ? "lights_all_on" : "lights_all_off", state);
   } else if (strcmp(cmd, "sync") == 0) {
-    ledStates[0] = (doc["bh"] == 1);
-    ledStates[1] = (doc["temp"] == 1);
-    ledStates[2] = (doc["humi"] == 1);
     ledMode = LED_STATIC;
+    ledStates[LED_BH_INDEX] = (doc["bh"] == 1);
+    ledStates[LED_TEMP_INDEX] = (doc["temp"] == 1);
+    ledStates[LED_HUMI_INDEX] = (doc["humi"] == 1);
+    ledStates[LED1_INDEX] = (doc["led1"] == 1);
+    ledStates[LED2_INDEX] = (doc["led2"] == 1);
     applyStaticLeds();
     publishStatus("sync_done");
   } else if (strcmp(cmd, "sensor") == 0) {
@@ -164,41 +184,40 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
 void updateWave() {
   if (ledMode != LED_WAVE)
     return;
+
   unsigned long currentMillis = millis();
   if (currentMillis - lastWaveTime >= waveSpeed) {
     lastWaveTime = currentMillis;
-    digitalWrite(LED_BH, LOW);
-    digitalWrite(LED_TEMP, LOW);
-    digitalWrite(LED_HUMI, LOW);
 
-    if (currentLedStep == 0)
-      digitalWrite(LED_BH, HIGH);
-    else if (currentLedStep == 1)
-      digitalWrite(LED_TEMP, HIGH);
-    else if (currentLedStep == 2)
-      digitalWrite(LED_HUMI, HIGH);
+    for (int i = 0; i < LED_COUNT; i++) {
+      digitalWrite(LED_PINS[i], LOW);
+    }
 
-    currentLedStep = (currentLedStep + 1) % 4;
+    digitalWrite(LED_PINS[currentLedStep], HIGH);
+    currentLedStep = (currentLedStep + 1) % LED_COUNT;
   }
 }
 
 void updateBlink() {
   if (ledMode != LED_BLINK)
     return;
+
   unsigned long currentMillis = millis();
   if (currentMillis - lastBlinkTime >= blinkSpeed) {
     lastBlinkTime = currentMillis;
     blinkState = !blinkState;
     uint8_t level = blinkState ? HIGH : LOW;
-    digitalWrite(LED_BH, level);
-    digitalWrite(LED_TEMP, level);
-    digitalWrite(LED_HUMI, level);
+
+    for (int i = 0; i < LED_COUNT; i++) {
+      digitalWrite(LED_PINS[i], level);
+    }
   }
 }
 
 void updateSensors() {
   if (!sensorsEnabled)
     return;
+
   unsigned long currentMillis = millis();
   if (currentMillis - lastSensorTime >= sensorInterval) {
     lastSensorTime = currentMillis;
@@ -211,9 +230,8 @@ void updateSensors() {
     bool humiValid = readHumi ? !isnan(h) : true;
     bool luxValid = readLux ? (lux >= 0) : true;
 
-    if (!tempValid || !humiValid || !luxValid) {
-      return; // Không in ra màn hình để tránh Lag quá mức
-    }
+    if (!tempValid || !humiValid || !luxValid)
+      return;
 
     if (client.connected() && ESP.getFreeHeap() >= 8192) {
       char buffer[80];
@@ -225,14 +243,13 @@ void updateSensors() {
 }
 
 void reconnectWiFi() {
-  // Non-blocking WiFi reconnect
   unsigned long currentMillis = millis();
   if (WiFi.status() != WL_CONNECTED) {
     if (currentMillis - lastWiFiCheckTime >= wifiCheckInterval) {
       lastWiFiCheckTime = currentMillis;
       Serial.println(F("WiFi disconnected. Attempting reconnect..."));
       WiFi.disconnect();
-      WiFi.reconnect(); // Dùng reconnect() của ESP32 không gây treo máy
+      WiFi.reconnect();
     }
   }
 }
@@ -243,7 +260,6 @@ void reconnectMQTT() {
     if (currentMillis - lastReconnectAttempt >= reconnectInterval) {
       lastReconnectAttempt = currentMillis;
       Serial.println(F("Attempting MQTT reconnect..."));
-      // Tạo một Last Will and Testament nếu mất kết nối MQTT
       if (client.connect("ESP32_Dashboard_Client", mqtt_user, mqtt_pass,
                          TOPIC_STATUS, 0, true,
                          "{\"status\":\"offline\",\"trigger\":\"lwt\"}")) {
@@ -276,7 +292,7 @@ void checkResetReason(int core) {
     break;
   case 4:
     Serial.println(F("OWDT_RESET"));
-    break; // Watchdog
+    break;
   case 12:
     Serial.println(F("SW_CPU_RESET"));
     break;
@@ -285,7 +301,7 @@ void checkResetReason(int core) {
     break;
   case 15:
     Serial.println(F("BROWNOUT_RESET"));
-    break; // Sụt nguồn
+    break;
   case 16:
     Serial.println(F("RTCWDT_RTC_RESET"));
     break;
@@ -299,12 +315,12 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println(F("\n--- ESP32 Starting ---"));
-  checkResetReason(0); // Kiểm tra core 0
-  checkResetReason(1); // Kiểm tra core 1
+  checkResetReason(0);
+  checkResetReason(1);
 
-  pinMode(LED_TEMP, OUTPUT);
-  pinMode(LED_BH, OUTPUT);
-  pinMode(LED_HUMI, OUTPUT);
+  for (int i = 0; i < LED_COUNT; i++) {
+    pinMode(LED_PINS[i], OUTPUT);
+  }
   applyStaticLeds();
 
   dht.begin();
@@ -312,8 +328,7 @@ void setup() {
   lightMeter.begin();
 
   WiFi.mode(WIFI_STA);
-  WiFi.setTxPower(
-      WIFI_POWER_15dBm); // Giảm peak current, tránh brownout trên USB
+  WiFi.setTxPower(WIFI_POWER_15dBm);
   WiFi.begin(ssid, password);
   Serial.println(F("Connecting to WiFi... (non-blocking)"));
 

@@ -1,6 +1,15 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+// --- Hardware Pins ---
+constexpr int LED_TEMP_PIN = 27;
+constexpr int LED_BH_PIN = 26;
+constexpr int LED_HUMI_PIN = 5;
+constexpr int LED1_PIN = 18;
+constexpr int LED2_PIN = 19;
+constexpr int DHTPIN = 4;
+constexpr int DHTTYPE = 11;
+
 // --- WiFi Credentials ---
 const char *ssid = "iPhone";
 const char *password = "88888888";

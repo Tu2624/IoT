@@ -13,15 +13,15 @@ async function main() {
   });
 
   console.log("Updating Old ESP32 names...");
-  
-  await pool.query("UPDATE BAO_CAO_BAO_MAT SET device_name = 'LED Nhiệt độ' WHERE description LIKE '%led_temp%'");
-  await pool.query("UPDATE BAO_CAO_BAO_MAT SET device_name = 'LED Độ ẩm' WHERE description LIKE '%led_humi%'");
-  await pool.query("UPDATE BAO_CAO_BAO_MAT SET device_name = 'LED Ánh sáng' WHERE description LIKE '%led_bh%'");
-  await pool.query("UPDATE BAO_CAO_BAO_MAT SET device_name = 'Tất cả LED' WHERE description LIKE '%lights_all%'");
-  
+
+  await pool.query("UPDATE LICH_SU_HANH_DONG SET device_name = 'LED Nhiệt độ' WHERE description LIKE '%led_temp%'");
+  await pool.query("UPDATE LICH_SU_HANH_DONG SET device_name = 'LED Độ ẩm' WHERE description LIKE '%led_humi%'");
+  await pool.query("UPDATE LICH_SU_HANH_DONG SET device_name = 'LED Ánh sáng' WHERE description LIKE '%led_bh%'");
+  await pool.query("UPDATE LICH_SU_HANH_DONG SET device_name = 'Tất cả LED' WHERE description LIKE '%lights_all%'");
+
   // They said: "bo cai ten ESP32 di chi co 3 led kia thoi"
   // So we can delete the remaining ESP32 rows which don't map to these LEDs
-  await pool.query("DELETE FROM BAO_CAO_BAO_MAT WHERE device_name = 'ESP32'");
+  await pool.query("DELETE FROM LICH_SU_HANH_DONG WHERE device_name = 'ESP32'");
 
   console.log("Done");
   process.exit(0);

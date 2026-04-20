@@ -26,6 +26,8 @@ const DEVICE_MAP = {
   'led_temp': 'LED_NHIET_DO',
   'led_humi': 'LED_DO_AM',
   'led_bh': 'LED_ANH_SANG',
+  'led_led1': 'LED_1',
+  'led_led2': 'LED_2',
   'lights_all_on': 'TAT_CA_LED',
   'lights_all_off': 'TAT_CA_LED',
 };
@@ -53,7 +55,9 @@ async function initDeviceStatusTable() {
       INSERT IGNORE INTO TRANG_THAI_THIET_BI (device_key, device_name, is_on) VALUES
       ('led_temp', 'LED_NHIET_DO', 1),
       ('led_humi', 'LED_DO_AM', 1),
-      ('led_bh', 'LED_ANH_SANG', 1)
+      ('led_bh', 'LED_ANH_SANG', 1),
+      ('led_led1', 'LED_1', 1),
+      ('led_led2', 'LED_2', 1)
     `);
     console.log('[DB] Device status table initialized (Persistence enabled)');
   } catch (e) {
@@ -126,14 +130,14 @@ app.prepare().then(async () => {
             const deviceName = mapDeviceName(`led_${command.target}`);
             const intent = command.state === 1 ? 'online' : 'offline';
             await pool.execute(
-              'INSERT INTO BAO_CAO_BAO_MAT (device_name, status, description) VALUES (?, ?, ?)',
+              'INSERT INTO LICH_SU_HANH_DONG (device_name, status, description) VALUES (?, ?, ?)',
               [deviceName, 'waiting', `Request: led_${command.target}:${intent}`]
             );
           } else if (command.cmd === 'all_lights') {
             const isOn = command.state === 1 ? 1 : 0;
             const intent = isOn ? 'online' : 'offline';
             await pool.execute(
-              'INSERT INTO BAO_CAO_BAO_MAT (device_name, status, description) VALUES (?, ?, ?)',
+              'INSERT INTO LICH_SU_HANH_DONG (device_name, status, description) VALUES (?, ?, ?)',
               ['TAT_CA_LED', 'waiting', `Request: all_lights:${intent}`]
             );
           }
@@ -198,12 +202,14 @@ app.prepare().then(async () => {
             try {
               const [devices] = await pool.execute('SELECT device_key, is_on FROM TRANG_THAI_THIET_BI');
 
-              let syncPayload = { cmd: 'sync', temp: 0, humi: 0, bh: 0 };
+              let syncPayload = { cmd: 'sync', temp: 0, humi: 0, bh: 0, led1: 0, led2: 0 };
 
               devices.forEach((device) => {
                 if (device.device_key === 'led_temp') syncPayload.temp = device.is_on;
                 if (device.device_key === 'led_humi') syncPayload.humi = device.is_on;
                 if (device.device_key === 'led_bh') syncPayload.bh = device.is_on;
+                if (device.device_key === 'led_led1') syncPayload.led1 = device.is_on;
+                if (device.device_key === 'led_led2') syncPayload.led2 = device.is_on;
               });
 
               // Bắn thẳng xuống ngay lập tức không cần đợi vì Mosquitto đảm bảo tính tuần tự
@@ -220,7 +226,7 @@ app.prepare().then(async () => {
             // 2. Lấy trạng thái hiện tại từ DB để so sánh
             let currentStatus = '';
             if (deviceKey) {
-              const [rows] = await pool.execute('SELECT status FROM TRANG_THAI_THIET_BI WHERE device_key = ?', [deviceKey]);
+              const [rows] = await pool.execute('SELECT is_on FROM TRANG_THAI_THIET_BI WHERE device_key = ?', [deviceKey]);
               if (rows.length > 0) currentStatus = rows[0].is_on ? 'online' : 'offline';
             }
 
@@ -229,10 +235,9 @@ app.prepare().then(async () => {
 
             // Thử tìm dòng 'waiting' gần nhất
             const [waitingRows] = await pool.execute(
-              'SELECT description FROM BAO_CAO_BAO_MAT WHERE device_name = ? AND status = ? ORDER BY report_id DESC LIMIT 1',
+              'SELECT description FROM LICH_SU_HANH_DONG WHERE device_name = ? AND status = ? ORDER BY report_id DESC LIMIT 1',
               [deviceName, 'waiting']
             );
-
             if (waitingRows.length > 0) {
               const description = waitingRows[0].description;
               // Nếu ESP32 có gửi trường 'state' (firmware mới), dùng nó luôn
@@ -246,13 +251,13 @@ app.prepare().then(async () => {
 
               // Cập nhật dòng 'waiting' thành trạng thái cuối cùng
               await pool.execute(
-                'UPDATE BAO_CAO_BAO_MAT SET status = ?, description = ?, report_date = NOW() WHERE device_name = ? AND status = ? ORDER BY report_id DESC LIMIT 1',
+                'UPDATE LICH_SU_HANH_DONG SET status = ?, description = ?, report_date = NOW() WHERE device_name = ? AND status = ? ORDER BY report_id DESC LIMIT 1',
                 [finalStatus, `Success: ${trigger}`, deviceName, 'waiting']
               );
             } else {
               // 4. Nếu không có 'waiting' (bấm nút vật lý), ghi log mới. (Đã bỏ logic isStatusChanged gây lỗi)
               await pool.execute(
-                'INSERT INTO BAO_CAO_BAO_MAT (device_name, status, description) VALUES (?, ?, ?)',
+                'INSERT INTO LICH_SU_HANH_DONG (device_name, status, description) VALUES (?, ?, ?)',
                 [deviceName, normalizedStatus, trigger]
               );
             }
@@ -274,6 +279,8 @@ app.prepare().then(async () => {
             if (data.led_temp !== undefined) await pool.execute('UPDATE TRANG_THAI_THIET_BI SET is_on = ? WHERE device_key = ?', [data.led_temp, 'led_temp']);
             if (data.led_humi !== undefined) await pool.execute('UPDATE TRANG_THAI_THIET_BI SET is_on = ? WHERE device_key = ?', [data.led_humi, 'led_humi']);
             if (data.led_bh !== undefined) await pool.execute('UPDATE TRANG_THAI_THIET_BI SET is_on = ? WHERE device_key = ?', [data.led_bh, 'led_bh']);
+            if (data.led1 !== undefined) await pool.execute('UPDATE TRANG_THAI_THIET_BI SET is_on = ? WHERE device_key = ?', [data.led1, 'led_led1']);
+            if (data.led2 !== undefined) await pool.execute('UPDATE TRANG_THAI_THIET_BI SET is_on = ? WHERE device_key = ?', [data.led2, 'led_led2']);
 
           } catch (e) {
             console.error('[DB] Error processing device status log:', e.message);

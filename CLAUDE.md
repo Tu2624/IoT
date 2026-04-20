@@ -98,16 +98,16 @@ browser → Socket.io emit → server.js → MQTT publish → ESP32
 
 - **`server.js`** — custom HTTP server wrapping Next.js; owns the MQTT client, Socket.io server, and DB writes. Emits `sensor_data`, `mqtt_status`, `device_status` events to connected browsers. Listens for `control_device` from browsers and forwards as JSON to `esp32/control`.
 - **`src/lib/db.ts`** — MySQL2 connection pool (reads env vars).
-- **`src/app/api/`** — REST endpoints for historical data (`/api/sensors/list` → `LICH_SU_DU_LIEU`, `/api/actions/list` → `BAO_CAO_BAO_MAT`).
+- **`src/app/api/`** — REST endpoints for historical data (`/api/sensors/list` → `LICH_SU_DU_LIEU`, `/api/actions/list` → `LICH_SU_HANH_DONG`).
 - **`src/app/page.tsx`** — main dashboard: real-time charts via Socket.io, LED toggles, sensor toggles, connection status.
 - **`src/app/data-sensor/page.tsx`** — paginated sensor history table with CSV export.
-- **`src/app/action-history/page.tsx`** — action/status log from `BAO_CAO_BAO_MAT`.
+- **`src/app/action-history/page.tsx`** — action/status log from `LICH_SU_HANH_DONG`.
 
 ### Database Schema (`schema.sql` at project root)
 
 Three tables in `iot_dashboard` database:
 - `LICH_SU_DU_LIEU` — sensor readings (`temp`, `humi`, `lux`, `recorded_date`)
-- `BAO_CAO_BAO_MAT` — device status/action log (`device_name`, `status`, `description`, `report_date`)
+- `LICH_SU_HANH_DONG` — device status/action log (`device_name`, `status`, `description`, `report_date`)
 - `NGUOI_DUNG` — users (`username`, `full_name`, `student_id`, `role`)
 
 ### Dependencies

@@ -18,7 +18,7 @@ Hệ thống Fullstack Website giám sát và điều khiển thiết bị IoT (
 3. MQTT Broker (Eclipse Mosquitto) đang chạy ở LAN (`172.20.10.2:2004`)
 
 ### 1. Thiết lập Cơ sở dữ liệu
-Nạp file `../schema.sql` vào MySQL để tạo database `iot_dashboard` và các table cần dùng (`LICH_SU_DU_LIEU`, `BAO_CAO_BAO_MAT`).
+Nạp file `../schema.sql` vào MySQL để tạo database `iot_dashboard` và các table cần dùng (`LICH_SU_DU_LIEU`, `LICH_SU_HANH_DONG`).
 
 ### 2. Cấu hình biến môi trường
 Kiểm tra file `.env.local` ở thư mục hiện tại:

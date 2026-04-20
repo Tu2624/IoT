@@ -10,7 +10,7 @@ async function checkDb() {
   });
 
   const [rows] = await connection.execute(
-    'SELECT report_id, device_name, status, description FROM BAO_CAO_BAO_MAT ORDER BY report_id DESC LIMIT 10'
+    'SELECT report_id, device_name, status, description FROM LICH_SU_HANH_DONG ORDER BY report_id DESC LIMIT 10'
   );
   console.log(JSON.stringify(rows, null, 2));
   await connection.end();

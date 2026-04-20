@@ -45,7 +45,7 @@ Dự án được chia làm 2 thành phần chính đặt trong cùng một Repo
 
 ### 2. Thiết lập Database (MySQL)
 1. Cài đặt và bật máy chủ MySQL (VD: XAMPP). Chắc chắn port `3306` đang hoạt động.
-2. Dùng file `schema.sql` có sẵn ở thư mục gốc import vào CSDL để tạo các bảng `LICH_SU_DU_LIEU`, `BAO_CAO_BAO_MAT` và `NGUOI_DUNG`.
+2. Dùng file `schema.sql` có sẵn ở thư mục gốc import vào CSDL để tạo các bảng `LICH_SU_DU_LIEU`, `LICH_SU_HANH_DONG` và `NGUOI_DUNG`.
 
 ### 3. Cài đặt & Chạy Website Dashboard
 1. Trỏ terminal vào thư mục web:

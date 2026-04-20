@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Database, History, Search } from 'lucide-react';
+import { LayoutDashboard, Database, History, BarChart3 } from 'lucide-react';
 import { clsx } from 'clsx';
 import Image from 'next/image';
 import profileImg from '../app/profile/profileImg.png';
@@ -9,6 +9,7 @@ import profileImg from '../app/profile/profileImg.png';
 const navItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'DataSensor', href: '/data-sensor', icon: Database },
+  { name: 'LedUsage', href: '/led-usage', icon: BarChart3 },
   { name: 'ActionHistory', href: '/action-history', icon: History },
 ];
 

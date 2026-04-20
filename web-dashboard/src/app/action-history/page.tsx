@@ -23,7 +23,6 @@ interface PaginationInfo {
 type SortKey = 'id' | 'device' | 'status' | 'trigger' | 'time';
 type SortOrder = 'asc' | 'desc';
 
-// Map sortKey frontend -> sortBy backend
 function mapSortKey(key: SortKey): string {
   switch (key) {
     case 'id': return 'report_id';
@@ -35,27 +34,29 @@ function mapSortKey(key: SortKey): string {
   }
 }
 
-// Chuẩn hóa tên thiết bị hiển thị
 const DEVICE_DISPLAY_NAMES: Record<string, string> = {
-  'LED_NHIET_DO': 'LED Nhiệt độ',
-  'LED_DO_AM': 'LED Độ ẩm',
-  'LED_ANH_SANG': 'LED Ánh sáng',
-  'TAT_CA_LED': 'Tất cả LED',
-  // Legacy names fallback
-  'LED Nhiệt độ': 'LED Nhiệt độ',
-  'LED Độ ẩm': 'LED Độ ẩm',
-  'LED Ánh sáng': 'LED Ánh sáng',
-  'Tất cả LED': 'Tất cả LED',
+  'LED_NHIET_DO': 'LED Nhiet do',
+  'LED_DO_AM': 'LED Do am',
+  'LED_ANH_SANG': 'LED Anh sang',
+  'LED_1': 'LED 1',
+  'LED_2': 'LED 2',
+  'TAT_CA_LED': 'Tat ca LED',
+  'LED Nhiet do': 'LED Nhiet do',
+  'LED Do am': 'LED Do am',
+  'LED Anh sang': 'LED Anh sang',
+  'LED 1': 'LED 1',
+  'LED 2': 'LED 2',
+  'Tat ca LED': 'Tat ca LED',
 };
 
 function formatDeviceName(deviceName: string, description: string): string {
-  // Ưu tiên từ DEVICE_DISPLAY_NAMES
   if (DEVICE_DISPLAY_NAMES[deviceName]) return DEVICE_DISPLAY_NAMES[deviceName];
-  // Fallback dựa vào description
-  if (description?.includes('led_temp')) return 'LED Nhiệt độ';
-  if (description?.includes('led_humi')) return 'LED Độ ẩm';
-  if (description?.includes('led_bh')) return 'LED Ánh sáng';
-  if (description?.includes('lights_all')) return 'Tất cả LED';
+  if (description?.includes('led_temp')) return 'LED Nhiet do';
+  if (description?.includes('led_humi')) return 'LED Do am';
+  if (description?.includes('led_bh')) return 'LED Anh sang';
+  if (description?.includes('led_led1')) return 'LED 1';
+  if (description?.includes('led_led2')) return 'LED 2';
+  if (description?.includes('lights_all')) return 'Tat ca LED';
   return deviceName;
 }
 
@@ -63,17 +64,11 @@ export default function ActionHistory() {
   const [data, setData] = useState<ActionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState<PaginationInfo>({ page: 1, limit: 10, total: 0, totalPages: 0 });
-
-  // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [searchTime, setSearchTime] = useState('');
   const [combinedFilter, setCombinedFilter] = useState('all');
-
-  // Sorting
   const [sortKey, setSortKey] = useState<SortKey>('time');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-
-  // Debounce timer
   const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
 
   const fetchData = useCallback(async (page: number = 1) => {
@@ -87,9 +82,7 @@ export default function ActionHistory() {
       });
 
       if (searchQuery) params.set('search', searchQuery);
-      if (searchTime) {
-        params.set('searchTime', searchTime);
-      }
+      if (searchTime) params.set('searchTime', searchTime);
       if (combinedFilter !== 'all') params.set('filter', combinedFilter);
 
       const res = await fetch(`/api/actions/list?${params.toString()}`);
@@ -110,12 +103,10 @@ export default function ActionHistory() {
     }
   }, [searchQuery, searchTime, combinedFilter, sortKey, sortOrder]);
 
-  // Fetch khi thay đổi sort
   useEffect(() => {
     fetchData(pagination.page);
   }, [sortKey, sortOrder, combinedFilter]);
 
-  // Debounce search
   useEffect(() => {
     if (searchTimer) clearTimeout(searchTimer);
     const timer = setTimeout(() => {
@@ -123,7 +114,6 @@ export default function ActionHistory() {
     }, 400);
     setSearchTimer(timer);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, searchTime]);
 
   const goToPage = (page: number) => {
@@ -163,7 +153,6 @@ export default function ActionHistory() {
     </th>
   );
 
-  // Generate page numbers with ellipsis
   const getPageNumbers = () => {
     const pages: (number | string)[] = [];
     const total = pagination.totalPages;
@@ -187,34 +176,32 @@ export default function ActionHistory() {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 backdrop-blur-md gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-100">Lịch sử Thao tác Thiết bị</h1>
-          <div className="text-slate-400 text-sm">Hiển thị lịch sử publish/subscribe MQTT</div>
+          <h1 className="text-xl font-bold text-slate-100">Lich su thao tac thiet bi</h1>
+          <div className="text-slate-400 text-sm">Hien thi lich su publish/subscribe MQTT</div>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Main Search Input */}
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Tìm kiếm..."
+              placeholder="Tim kiem..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full pl-9 p-2"
             />
           </div>
 
-          {/* Single Time Filter with Picker */}
           <div className="relative flex">
             <input
               type="text"
-              placeholder="Tìm theo thời gian..."
-              title="Tìm theo thời gian (Có thể dán)"
+              placeholder="Tim theo thoi gian..."
+              title="Tim theo thoi gian"
               value={searchTime}
               onChange={e => setSearchTime(e.target.value)}
               className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-l-lg focus:ring-blue-500 focus:border-blue-500 block w-[160px] p-2 placeholder:text-slate-500"
             />
-            <div className="relative bg-slate-800 border border-l-0 border-slate-700 rounded-r-lg flex items-center justify-center px-3 hover:bg-slate-700 transition cursor-pointer" title="Chọn từ lịch">
+            <div className="relative bg-slate-800 border border-l-0 border-slate-700 rounded-r-lg flex items-center justify-center px-3 hover:bg-slate-700 transition cursor-pointer" title="Chon tu lich">
               <Calendar className="w-4 h-4 text-slate-400" />
               <input
                 type="datetime-local"
@@ -229,7 +216,6 @@ export default function ActionHistory() {
             </div>
           </div>
 
-          {/* Combined Filter */}
           <div className="relative">
             <Filter className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <select
@@ -237,10 +223,12 @@ export default function ActionHistory() {
               onChange={e => setCombinedFilter(e.target.value)}
               className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full pl-9 p-2 appearance-none pr-8 cursor-pointer"
             >
-              <option value="all">Mọi bộ lọc (Thiết bị & Trạng thái)</option>
-              <option value="device_LED_NHIET_DO">LED Nhiệt độ</option>
-              <option value="device_LED_DO_AM">LED Độ ẩm</option>
-              <option value="device_LED_ANH_SANG">LED Ánh sáng</option>
+              <option value="all">Moi bo loc</option>
+              <option value="device_LED_NHIET_DO">LED Nhiet do</option>
+              <option value="device_LED_DO_AM">LED Do am</option>
+              <option value="device_LED_ANH_SANG">LED Anh sang</option>
+              <option value="device_LED_1">LED 1</option>
+              <option value="device_LED_2">LED 2</option>
               <option value="status_online">Online</option>
               <option value="status_offline">Offline</option>
               <option value="status_waiting">Waiting</option>
@@ -255,10 +243,10 @@ export default function ActionHistory() {
             <thead>
               <tr className="border-b border-slate-700 text-slate-400 text-sm">
                 {renderSortHeader("ID", "id")}
-                {renderSortHeader("Tên thiết bị", "device")}
-                {renderSortHeader("Trạng thái", "status")}
-                {renderSortHeader("Mã lệnh", "trigger")}
-                {renderSortHeader("Thời gian", "time")}
+                {renderSortHeader("Ten thiet bi", "device")}
+                {renderSortHeader("Trang thai", "status")}
+                {renderSortHeader("Ma lenh", "trigger")}
+                {renderSortHeader("Thoi gian", "time")}
               </tr>
             </thead>
             <tbody className="text-sm">
@@ -266,11 +254,11 @@ export default function ActionHistory() {
                 <tr><td colSpan={5} className="text-center py-8 text-slate-500">
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-4 h-4 border-2 border-slate-500 border-t-transparent rounded-full animate-spin"></div>
-                    Đang tải dữ liệu...
+                    Dang tai du lieu...
                   </div>
                 </td></tr>
               ) : data.length === 0 ? (
-                <tr><td colSpan={5} className="text-center py-8 text-slate-500">Không tìm thấy dữ liệu phù hợp.</td></tr>
+                <tr><td colSpan={5} className="text-center py-8 text-slate-500">Khong tim thay du lieu phu hop.</td></tr>
               ) : (
                 data.map(row => (
                   <tr key={row.report_id} className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors">
@@ -290,18 +278,17 @@ export default function ActionHistory() {
           </table>
         </div>
 
-        {/* Pagination Controls */}
         {!loading && pagination.totalPages > 1 && (
           <div className="mt-4 flex flex-col md:flex-row items-center justify-between border-t border-slate-700/50 pt-4 gap-4">
             <span className="text-sm text-slate-400">
-              Trang <span className="font-medium text-slate-200">{pagination.page}</span> / <span className="font-medium text-slate-200">{pagination.totalPages}</span> — Tổng <span className="font-medium text-slate-200">{pagination.total}</span> kết quả
+              Trang <span className="font-medium text-slate-200">{pagination.page}</span> / <span className="font-medium text-slate-200">{pagination.totalPages}</span> - Tong <span className="font-medium text-slate-200">{pagination.total}</span> ket qua
             </span>
             <div className="flex items-center gap-2">
               <button
                 disabled={pagination.page === 1}
                 onClick={() => goToPage(pagination.page - 1)}
                 className="p-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-700/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Trang trước"
+                title="Trang truoc"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
@@ -332,7 +319,7 @@ export default function ActionHistory() {
                 disabled={pagination.page === pagination.totalPages}
                 onClick={() => goToPage(pagination.page + 1)}
                 className="p-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-700/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Trang tiếp theo"
+                title="Trang tiep theo"
               >
                 <ChevronRight className="w-5 h-5" />
               </button>

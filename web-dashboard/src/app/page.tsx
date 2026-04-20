@@ -1,19 +1,10 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Card from '@/components/Card';
 import { Thermometer, Droplets, Sun } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { clsx } from 'clsx';
 import { useDevice } from '@/context/DeviceContext';
-
-interface SensorData {
-  time: string;
-  temp: number;
-  humi: number;
-  lux: number;
-}
-
-const MAX_CHART_POINTS = 5; // Chỉ hiển thị 5 giá trị gần nhất
 
 export default function Dashboard() {
   const {
@@ -37,11 +28,11 @@ export default function Dashboard() {
 
   const [mounted, setMounted] = useState(false);
 
-  // Pre-compute random positions once
   const fireParticles = useMemo(() => Array.from({ length: 6 }, () => ({
     left: `${Math.random() * 80 + 10}%`,
     delay: `${Math.random() * 3}s`,
   })), []);
+
   const waterDrops = useMemo(() => Array.from({ length: 8 }, () => ({
     left: `${Math.random() * 90 + 5}%`,
     delay: `${Math.random() * 2}s`,
@@ -57,10 +48,9 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
-        {/* Card 1: Status Monitor (Left) */}
         <div className="flex items-center gap-6 bg-slate-800/50 p-4 px-6 rounded-2xl border border-slate-700/50 backdrop-blur-md shadow-lg h-fit">
           <div className="flex flex-col gap-1.5">
-            <h1 className="text-sm font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent uppercase tracking-wider whitespace-nowrap">Trạng thái hệ thống</h1>
+            <h1 className="text-sm font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent uppercase tracking-wider whitespace-nowrap">Trang thai he thong</h1>
             <div className="flex gap-2">
               <span className={clsx("flex items-center gap-1.5 text-[9px] font-bold px-2 py-0.5 rounded-md border",
                 mqttStatus === 'connected' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border-rose-500/20")}>
@@ -76,21 +66,21 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Card 2: Device Controls (Center) */}
         <div className="flex-1 flex justify-center mr-[220px]">
           <div className={clsx(
-            "flex items-center gap-12 bg-slate-900/60 p-4 px-10 rounded-2xl border border-white/10 backdrop-blur-md shadow-2xl transition-all duration-300",
+            "flex items-center gap-8 bg-slate-900/60 p-4 px-8 rounded-2xl border border-white/10 backdrop-blur-md shadow-2xl transition-all duration-300 flex-wrap justify-center",
             !ledsReady && "opacity-50 pointer-events-none"
           )}>
-            <DeviceToggle color="red" label="Nhiệt độ" checked={safeLeds.temp} onChange={() => toggleLed('temp')} />
-            <DeviceToggle color="blue" label="Độ ẩm" checked={safeLeds.humi} onChange={() => toggleLed('humi')} />
-            <DeviceToggle color="yellow" label="Ánh sáng" checked={safeLeds.bh} onChange={() => toggleLed('bh')} />
+            <DeviceToggle color="red" label="Nhiet do" checked={safeLeds.temp} onChange={() => toggleLed('temp')} />
+            <DeviceToggle color="blue" label="Do am" checked={safeLeds.humi} onChange={() => toggleLed('humi')} />
+            <DeviceToggle color="yellow" label="Anh sang" checked={safeLeds.bh} onChange={() => toggleLed('bh')} />
+            <DeviceToggle color="green" label="LED 1" checked={safeLeds.led1} onChange={() => toggleLed('led1')} />
+            <DeviceToggle color="violet" label="LED 2" checked={safeLeds.led2} onChange={() => toggleLed('led2')} />
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Card Nhiệt độ */}
         <Card glowColor="red" className="p-6 relative overflow-hidden group">
           <div className="sensor-card-animation fire-effect">
             {mounted && fireParticles.map((p, i) => (
@@ -105,13 +95,12 @@ export default function Dashboard() {
               <p className="text-slate-400 text-sm font-medium">Temperature</p>
               <div className="flex items-baseline gap-1">
                 <h3 className="text-3xl font-bold text-slate-100">{currentSensor.temp.toFixed(1)}</h3>
-                <span className="text-red-400 text-sm font-semibold">°C</span>
+                <span className="text-red-400 text-sm font-semibold">C</span>
               </div>
             </div>
           </div>
         </Card>
 
-        {/* Card Độ ẩm */}
         <Card glowColor="blue" className="p-6 relative overflow-hidden group">
           <div className="sensor-card-animation water-effect">
             {mounted && waterDrops.map((p, i) => (
@@ -132,7 +121,6 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        {/* Card Ánh sáng */}
         <Card glowColor="yellow" className="p-6 relative overflow-hidden group">
           <div className="pulse-glow glow-yellow"></div>
           <div className="flex items-center gap-4 relative z-10">
@@ -151,7 +139,7 @@ export default function Dashboard() {
       </div>
 
       <Card className="p-6 min-h-[400px]">
-        <h3 className="text-lg font-semibold mb-6 text-slate-200">Biểu đồ Thông số Thời gian thực</h3>
+        <h3 className="text-lg font-semibold mb-6 text-slate-200">Bieu do thong so thoi gian thuc</h3>
         <div className="h-[350px] w-full min-h-[350px]">
           {mounted && (
             <ResponsiveContainer width="100%" height="100%" minHeight={350} minWidth={100}>
@@ -164,16 +152,15 @@ export default function Dashboard() {
                   itemStyle={{ color: '#e2e8f0' }}
                 />
                 <Legend verticalAlign="top" height={36} />
-                <Line type="monotone" dataKey="temp" name="Nhiệt độ (°C)" stroke="#ef4444" strokeWidth={3} dot={false} activeDot={{ r: 6 }} isAnimationActive={false} />
-                <Line type="monotone" dataKey="humi" name="Độ ẩm (%)" stroke="#3b82f6" strokeWidth={3} dot={false} activeDot={{ r: 6 }} isAnimationActive={false} />
-                <Line type="monotone" dataKey="lux" name="Ánh sáng (Lx)" stroke="#eab308" strokeWidth={3} dot={false} activeDot={{ r: 6 }} isAnimationActive={false} />
+                <Line type="monotone" dataKey="temp" name="Nhiet do (C)" stroke="#ef4444" strokeWidth={3} dot={false} activeDot={{ r: 6 }} isAnimationActive={false} />
+                <Line type="monotone" dataKey="humi" name="Do am (%)" stroke="#3b82f6" strokeWidth={3} dot={false} activeDot={{ r: 6 }} isAnimationActive={false} />
+                <Line type="monotone" dataKey="lux" name="Anh sang (Lx)" stroke="#eab308" strokeWidth={3} dot={false} activeDot={{ r: 6 }} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
           )}
         </div>
       </Card>
 
-      {/* Toast Notification */}
       {alert && alert.message && (
         <div className={clsx(
           "fixed top-24 right-6 px-4 py-3 rounded-xl shadow-2xl border backdrop-blur-md z-50 flex items-center gap-3 transition-all duration-300 animate-in slide-in-from-right-8",
@@ -181,18 +168,20 @@ export default function Dashboard() {
         )}>
           <div className={clsx("w-2 h-2 rounded-full animate-pulse", alert.type === 'error' ? "bg-rose-400" : "bg-emerald-400")} />
           <span className="font-medium text-sm drop-shadow-sm">{alert.message}</span>
-          <button onClick={clearAlert} className="ml-2 text-white/50 hover:text-white pb-0.5 transition-colors">✕</button>
+          <button onClick={clearAlert} className="ml-2 text-white/50 hover:text-white pb-0.5 transition-colors">x</button>
         </div>
       )}
     </div>
   );
 }
 
-function DeviceToggle({ color, label, checked, onChange }: { color: 'red' | 'blue' | 'yellow', label: string, checked: boolean, onChange: () => void }) {
+function DeviceToggle({ color, label, checked, onChange }: { color: 'red' | 'blue' | 'yellow' | 'green' | 'violet', label: string, checked: boolean, onChange: () => void }) {
   const config = {
     red: { bg: 'bg-[#FF0000]', icon: <Thermometer className="w-5 h-5 text-white stroke-[2.5]" /> },
     blue: { bg: 'bg-[#0088FF]', icon: <Droplets className="w-5 h-5 text-white" fill="white" /> },
-    yellow: { bg: 'bg-[#FFAA00]', icon: <Sun className="w-5 h-5 text-white stroke-[2.5]" /> }
+    yellow: { bg: 'bg-[#FFAA00]', icon: <Sun className="w-5 h-5 text-white stroke-[2.5]" /> },
+    green: { bg: 'bg-[#16A34A]', icon: <span className="text-sm font-black text-white">1</span> },
+    violet: { bg: 'bg-[#7C3AED]', icon: <span className="text-sm font-black text-white">2</span> }
   };
 
   const { bg, icon } = config[color];
@@ -210,7 +199,6 @@ function DeviceToggle({ color, label, checked, onChange }: { color: 'red' | 'blu
             "w-16 h-9 rounded-full relative transition-all duration-500 shadow-inner overflow-hidden border-2 border-black/5",
             checked ? "bg-[#FFD233]" : "bg-gradient-to-br from-blue-900 to-slate-900"
           )}>
-            {/* Stars for OFF state */}
             {!checked && (
               <>
                 <div className="absolute top-2 left-4 w-0.5 h-0.5 bg-white rounded-full animate-pulse"></div>
@@ -219,7 +207,6 @@ function DeviceToggle({ color, label, checked, onChange }: { color: 'red' | 'blu
               </>
             )}
 
-            {/* Sun/Moon highlight behind thumb */}
             <div className={clsx(
               "absolute top-2 w-5 h-5 rounded-full blur-[2px] transition-all duration-500",
               checked ? "bg-[#FF9900] left-[18px]" : "bg-blue-400/20 left-[36px]"

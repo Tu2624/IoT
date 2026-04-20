@@ -7,6 +7,8 @@ interface LedsState {
   bh: boolean;
   temp: boolean;
   humi: boolean;
+  led1: boolean;
+  led2: boolean;
 }
 
 interface SensorData {
@@ -31,7 +33,7 @@ interface DeviceContextType {
 const DeviceContext = createContext<DeviceContextType | undefined>(undefined);
 
 export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [leds, setLeds] = useState<LedsState>({ bh: false, temp: false, humi: false });
+  const [leds, setLeds] = useState<LedsState>({ bh: false, temp: false, humi: false, led1: false, led2: false });
   const [ledsReady, setLedsReady] = useState(false);
   const [mqttStatus, setMqttStatus] = useState<'connected' | 'disconnected'>('disconnected');
   const [espStatus, setEspStatus] = useState<'online' | 'offline'>('offline');
@@ -55,6 +57,8 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             temp: json.status.led_temp === true,
             humi: json.status.led_humi === true,
             bh: json.status.led_bh === true,
+            led1: json.status.led_led1 === true,
+            led2: json.status.led_led2 === true,
           });
         }
       } catch (err) {
@@ -117,6 +121,14 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             // Để cho chúng tự động chạy hết 5s để trigger hàm hoàn tác (revert) nút bấm và hiện dòng thông báo!
           } else {
             setEspStatus('online');
+            setLeds(prev => ({
+              ...prev,
+              ...(payload.led_temp !== undefined ? { temp: payload.led_temp === 1 || payload.led_temp === true } : {}),
+              ...(payload.led_humi !== undefined ? { humi: payload.led_humi === 1 || payload.led_humi === true } : {}),
+              ...(payload.led_bh !== undefined ? { bh: payload.led_bh === 1 || payload.led_bh === true } : {}),
+              ...(payload.led1 !== undefined ? { led1: payload.led1 === 1 || payload.led1 === true } : {}),
+              ...(payload.led2 !== undefined ? { led2: payload.led2 === 1 || payload.led2 === true } : {}),
+            }));
             if (payload.trigger && pendingTimeouts.current[payload.trigger]) {
               console.log(`[SUCCESS] Command ${payload.trigger} confirmed.`);
               clearTimeout(pendingTimeouts.current[payload.trigger]);

@@ -57,12 +57,12 @@ export async function GET(request: NextRequest) {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Count total
-    const countQuery = `SELECT COUNT(*) as total FROM BAO_CAO_BAO_MAT ${whereClause}`;
+    const countQuery = `SELECT COUNT(*) as total FROM LICH_SU_HANH_DONG ${whereClause}`;
     const [countRows] = await pool.query<RowDataPacket[]>(countQuery, params);
     const total = countRows[0].total;
 
     // Fetch paginated data
-    const dataQuery = `SELECT * FROM BAO_CAO_BAO_MAT ${whereClause} ORDER BY ${safeSortBy} ${safeSortOrder} LIMIT ? OFFSET ?`;
+    const dataQuery = `SELECT * FROM LICH_SU_HANH_DONG ${whereClause} ORDER BY ${safeSortBy} ${safeSortOrder} LIMIT ? OFFSET ?`;
     const [rows] = await pool.query<RowDataPacket[]>(dataQuery, [...params, limit, offset]);
 
     return NextResponse.json({

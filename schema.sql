@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS LICH_SU_DU_LIEU (
 );
 
 -- Bảng lưu trữ lịch sử thao tác bật tắt (ActionHistory)
-CREATE TABLE IF NOT EXISTS BAO_CAO_BAO_MAT (
+CREATE TABLE IF NOT EXISTS LICH_SU_HANH_DONG (
     report_id INT AUTO_INCREMENT PRIMARY KEY,
     device_name VARCHAR(50) NOT NULL,
     status VARCHAR(20) NOT NULL, -- 'online', 'offline', 'waiting'
@@ -41,8 +41,8 @@ CREATE TABLE IF NOT EXISTS BAO_CAO_BAO_MAT (
 
 -- Bảng trạng thái hiện tại của từng thiết bị (để đồng bộ Frontend)
 CREATE TABLE IF NOT EXISTS TRANG_THAI_THIET_BI (
-    device_key VARCHAR(30) PRIMARY KEY,  -- 'led_temp', 'led_humi', 'led_bh'
-    device_name VARCHAR(50) NOT NULL,    -- 'LED_NHIET_DO', 'LED_DO_AM', 'LED_ANH_SANG'
+    device_key VARCHAR(30) PRIMARY KEY,  -- 'led_temp', 'led_humi', 'led_bh', 'led_led1', 'led_led2'
+    device_name VARCHAR(50) NOT NULL,    -- 'LED_NHIET_DO', 'LED_DO_AM', 'LED_ANH_SANG', 'LED_1', 'LED_2'
     is_on TINYINT(1) DEFAULT 1,          -- 1 = On, 0 = Off
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -51,4 +51,6 @@ CREATE TABLE IF NOT EXISTS TRANG_THAI_THIET_BI (
 INSERT IGNORE INTO TRANG_THAI_THIET_BI (device_key, device_name, is_on) VALUES
 ('led_temp', 'LED_NHIET_DO', 1),
 ('led_humi', 'LED_DO_AM', 1),
-('led_bh', 'LED_ANH_SANG', 1);
+('led_bh', 'LED_ANH_SANG', 1),
+('led_led1', 'LED_1', 1),
+('led_led2', 'LED_2', 1);

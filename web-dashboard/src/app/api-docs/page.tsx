@@ -94,7 +94,9 @@ const endpoints: ApiEndpoint[] = [
   "status": {
     "led_temp": true,
     "led_humi": false,
-    "led_bh": true
+    "led_bh": true,
+    "led_led1": false,
+    "led_led2": true
   }
 }`
   }
